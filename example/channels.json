@@ -1,0 +1,3 @@
+{
+  "ntfy": { "type": "ntfy", "server": "https://ntfy.sh", "topic": "CHANGE-ME-unguessable-topic", "token": "" }
+}

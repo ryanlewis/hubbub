@@ -1,0 +1,14 @@
+{
+  "publicPort": 8080,
+  "ops": { "port": 2112 },
+  "rateCapPerHour": 60,
+  "responseWindow": "2.5s",
+  "queueTTL": "6h",
+  "spoolDir": "example/spool",
+  "spoolCapPerChannel": 100,
+  "drainPace": "2s",
+  "attemptTimeout": "10s",
+  "deliveryLog": "example/delivery.log",
+  "keysFile": "example/keys.json",
+  "channelsFile": "example/channels.json"
+}

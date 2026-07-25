@@ -1,0 +1,5 @@
+/hubbub
+/spool/
+*.log
+/example/spool/
+/example/delivery.log
