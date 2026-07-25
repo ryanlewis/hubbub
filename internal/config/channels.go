@@ -1,11 +1,10 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
 
+	"github.com/BurntSushi/toml"
 	"github.com/ryanlewis/hubbub/internal/adapter"
 )
 
@@ -52,8 +51,8 @@ func (s *ChannelSet) Enabled() []*Channel {
 }
 
 type channelEnvelope struct {
-	Type    string `json:"type"`
-	Enabled *bool  `json:"enabled"`
+	Type    string `toml:"type"`
+	Enabled *bool  `toml:"enabled"`
 }
 
 // maxChannelIDLen keeps an id usable as a path component on every filesystem
@@ -63,8 +62,8 @@ const maxChannelIDLen = 64
 // validChannelID rejects any id that isn't a single, safe path component.
 // The id is the spool directory name (`spool/<id>/`), so ".." would point a
 // channel's spool at the config directory — whose files the drain scan then
-// parses as zero-valued, long-expired items and deletes, taking keys.json and
-// channels.json with them. A separator anywhere is enough to strand a spool
+// parses as zero-valued, long-expired items and deletes, taking keys.toml and
+// channels.toml with them. A separator anywhere is enough to strand a spool
 // outside the tree the engine reconciles.
 func validChannelID(id string) error {
 	switch {
@@ -86,34 +85,31 @@ func validChannelID(id string) error {
 	return nil
 }
 
-// LoadChannels parses and validates channels.json, constructing every
-// enabled instance's adapter so a bad config block fails the whole load
+// LoadChannels parses and validates channels.toml, constructing every enabled
+// instance's adapter so a bad config block fails the whole load
 // (validate-before-swap keeps the previous set alive).
 //
-// A disabled instance is type-checked but NOT constructed: "enabled": false
-// is how an operator parks a channel that has gone bad, usually while
-// stripping its now-stale settings, and that edit must not take the whole
-// file — and with it every healthy channel — down with it.
+// A disabled instance is type-checked but NOT constructed: enabled = false is
+// how an operator parks a channel that has gone bad, usually while stripping
+// its now-stale settings, and that edit must not take the whole file — and
+// with it every healthy channel — down with it.
 func LoadChannels(path string) (*ChannelSet, error) {
-	raw, err := os.ReadFile(path)
+	// Primitive defers each block's decode until we know which adapter owns
+	// it. The metadata tracks what every deferred decode consumed, so the
+	// unknown-key check at the end still covers adapter settings.
+	var entries map[string]toml.Primitive
+	md, err := toml.DecodeFile(path, &entries)
 	if err != nil {
-		return nil, err
-	}
-	if dup := firstDuplicateKey(raw); dup != "" {
-		return nil, fmt.Errorf("%s: channel %q appears twice (JSON keeps only the last, silently dropping the first block)", path, dup)
-	}
-	var entries map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &entries); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 
 	set := &ChannelSet{byID: make(map[string]*Channel, len(entries))}
-	for id, rawCfg := range entries {
+	for id, prim := range entries {
 		if err := validChannelID(id); err != nil {
 			return nil, fmt.Errorf("%s: channel %q: %w", path, id, err)
 		}
 		var env channelEnvelope
-		if err := json.Unmarshal(rawCfg, &env); err != nil {
+		if err := md.PrimitiveDecode(prim, &env); err != nil {
 			return nil, fmt.Errorf("%s: channel %q: %w", path, id, err)
 		}
 		if env.Type == "" {
@@ -122,19 +118,31 @@ func LoadChannels(path string) (*ChannelSet, error) {
 		ch := &Channel{ID: id, Type: env.Type, Enabled: env.Enabled == nil || *env.Enabled}
 		if !ch.Enabled {
 			// Typo-check the type name only — cheap, and it still catches the
-			// edit that would fail on re-enable.
+			// edit that would fail on re-enable. Absorb the rest of the block
+			// so its settings don't read as unknown keys; a parked channel is
+			// deliberately not validated.
 			if !adapter.Known(env.Type) {
 				return nil, fmt.Errorf("%s: channel %q: unknown adapter type %q", path, id, env.Type)
+			}
+			var parked map[string]any
+			if err := md.PrimitiveDecode(prim, &parked); err != nil {
+				return nil, fmt.Errorf("%s: channel %q: %w", path, id, err)
 			}
 			set.byID[id] = ch
 			continue
 		}
-		a, err := adapter.New(env.Type, id, rawCfg)
+		decode := func(v any) error { return md.PrimitiveDecode(prim, v) }
+		a, err := adapter.New(env.Type, id, decode)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}
 		ch.Adapter = a
 		set.byID[id] = ch
+	}
+	// Runs after every deferred decode, so it catches a typo in an adapter's
+	// own settings as well as a stray top-level key.
+	if err := rejectUnknown(path, md); err != nil {
+		return nil, err
 	}
 	return set, nil
 }

@@ -298,7 +298,7 @@ func statusFor(results map[string]string) (int, string) {
 		// defined as the latter. A key left permitted a disabled channel nags
 		// as 207 until the config inconsistency is fixed; 502 would instead
 		// invite generic 5xx retry machinery to hammer a request that cannot
-		// succeed until a human edits channels.json.
+		// succeed until a human edits channels.toml.
 		return http.StatusMultiStatus, "partial"
 	default:
 		return http.StatusMultiStatus, "partial"

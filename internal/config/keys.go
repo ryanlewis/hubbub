@@ -1,10 +1,9 @@
 package config
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"os"
+
+	"github.com/BurntSushi/toml"
 )
 
 // Caller is one unified caller entry: bearer key(s) + permission boundary.
@@ -20,33 +19,36 @@ type Caller struct {
 	Defaults   map[string]string
 }
 
-type callerJSON struct {
-	Key        flexStrings       `json:"key"`
-	URLToken   flexStrings       `json:"urlToken"`
-	Channels   []string          `json:"channels"`
-	MaxPerHour int               `json:"maxPerHour"`
-	Defaults   map[string]string `json:"defaults"`
+type callerTOML struct {
+	Key        flexStrings       `toml:"key"`
+	URLToken   flexStrings       `toml:"url_token"`
+	Channels   []string          `toml:"channels"`
+	MaxPerHour int               `toml:"max_per_hour"`
+	Defaults   map[string]string `toml:"defaults"`
 }
 
-// flexStrings unmarshals "x" or ["x","y"].
+// flexStrings accepts key = "x" or key = ["x", "y"].
 type flexStrings []string
 
-func (f *flexStrings) UnmarshalJSON(b []byte) error {
-	b = bytes.TrimSpace(b)
-	if len(b) > 0 && b[0] == '"' {
-		var s string
-		if err := json.Unmarshal(b, &s); err != nil {
-			return err
-		}
-		*f = []string{s}
+func (f *flexStrings) UnmarshalTOML(v any) error {
+	switch t := v.(type) {
+	case string:
+		*f = []string{t}
 		return nil
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, e := range t {
+			s, ok := e.(string)
+			if !ok {
+				return fmt.Errorf("expected a string or an array of strings, got %T inside the array", e)
+			}
+			out = append(out, s)
+		}
+		*f = out
+		return nil
+	default:
+		return fmt.Errorf("expected a string or an array of strings, got %T", v)
 	}
-	var ss []string
-	if err := json.Unmarshal(b, &ss); err != nil {
-		return fmt.Errorf("expected string or array of strings: %w", err)
-	}
-	*f = ss
-	return nil
 }
 
 // Keyring is the immutable parsed keys file; swapped atomically on reload.
@@ -62,24 +64,19 @@ func (k *Keyring) Lookup(key string) (*Caller, bool) {
 const minKeyLen = 16 // bytes of the string; issued keys are ≥16 bytes of entropy
 
 func LoadKeys(path string) (*Keyring, error) {
-	raw, err := os.ReadFile(path)
+	var entries map[string]callerTOML
+	md, err := toml.DecodeFile(path, &entries)
 	if err != nil {
-		return nil, err
-	}
-	if dup := firstDuplicateKey(raw); dup != "" {
-		return nil, fmt.Errorf("%s: caller %q appears twice (JSON keeps only the last, silently dropping the first block's keys)", path, dup)
-	}
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	var entries map[string]callerJSON
-	if err := dec.Decode(&entries); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	if err := rejectUnknown(path, md); err != nil {
+		return nil, err
 	}
 
 	ring := &Keyring{byKey: make(map[string]*Caller)}
 	for id, e := range entries {
 		if len(e.Key) == 0 && len(e.URLToken) == 0 {
-			return nil, fmt.Errorf("%s: caller %q has no key or urlToken", path, id)
+			return nil, fmt.Errorf("%s: caller %q has no key or url_token", path, id)
 		}
 		if e.Channels == nil {
 			return nil, fmt.Errorf("%s: caller %q has no channels list", path, id)

@@ -1,0 +1,15 @@
+# One entry per caller. The channels list is that caller's permission boundary
+# AND its delivery set — a key permitted ["ntfy"] only ever reaches ntfy.
+# Generate keys with: openssl rand -hex 24
+
+[dev]
+key = "nh_dev_key_change_me"
+channels = ["ntfy"]
+
+# key also accepts an array, which is how you rotate with no outage window:
+# add the new key, flip the caller over, then remove the old one. Both map to
+# the same caller id in the delivery log.
+#
+# [backup-host]
+# key = ["nh_old_key...", "nh_new_key..."]
+# channels = ["ntfy"]

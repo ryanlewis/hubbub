@@ -5,7 +5,6 @@ package adapter
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
@@ -53,8 +52,13 @@ type Adapter interface {
 	Send(ctx context.Context, n notify.Notification) error
 }
 
+// Decode fills v from a channel instance's config block. Adapters call it with
+// a pointer to their own config struct, so the config file's format stays the
+// config package's business — an adapter never imports a parser.
+type Decode func(v any) error
+
 // Factory decodes and validates a channel instance's config block.
-type Factory func(id string, cfg json.RawMessage) (Adapter, error)
+type Factory func(id string, decode Decode) (Adapter, error)
 
 var registry = map[string]Factory{}
 
@@ -70,12 +74,12 @@ func Known(typeName string) bool {
 }
 
 // New builds an adapter instance, validating its config block.
-func New(typeName, id string, cfg json.RawMessage) (Adapter, error) {
+func New(typeName, id string, decode Decode) (Adapter, error) {
 	f, ok := registry[typeName]
 	if !ok {
 		return nil, fmt.Errorf("channel %q: unknown adapter type %q (known: %v)", id, typeName, Types())
 	}
-	return f(id, cfg)
+	return f(id, decode)
 }
 
 func Types() []string {

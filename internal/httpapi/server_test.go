@@ -23,17 +23,17 @@ const devKey = "nh_test_key_0123456789"
 
 // newTestServer wires the full vertical — Store → Engine → worker → ntfy
 // adapter → the given upstream — with a short response window.
-func newTestServer(t *testing.T, upstreamURL string, channelsJSON string) *Server {
+func newTestServer(t *testing.T, upstreamURL string, channelsTOML string) *Server {
 	t.Helper()
 	dir := t.TempDir()
 
-	if channelsJSON == "" {
-		channelsJSON = `{"ntfy": {"type":"ntfy","server":"` + upstreamURL + `","topic":"tst"}}`
+	if channelsTOML == "" {
+		channelsTOML = "[ntfy]\ntype = \"ntfy\"\nserver = \"" + upstreamURL + "\"\ntopic = \"tst\"\n"
 	}
-	keysPath := filepath.Join(dir, "keys.json")
-	chansPath := filepath.Join(dir, "channels.json")
-	os.WriteFile(keysPath, []byte(`{"dev": {"key":"`+devKey+`","channels":["ntfy"]}}`), 0o600)
-	os.WriteFile(chansPath, []byte(channelsJSON), 0o600)
+	keysPath := filepath.Join(dir, "keys.toml")
+	chansPath := filepath.Join(dir, "channels.toml")
+	os.WriteFile(keysPath, []byte("[dev]\nkey = \""+devKey+"\"\nchannels = [\"ntfy\"]\n"), 0o600)
+	os.WriteFile(chansPath, []byte(channelsTOML), 0o600)
 
 	store, err := config.NewStore(&config.Config{KeysFile: keysPath, ChannelsFile: chansPath})
 	if err != nil {
@@ -172,10 +172,10 @@ func TestNotifyForbiddenChannel(t *testing.T) {
 // A disabled channel was never attempted, so it is not a permanent failure:
 // 502 is defined as "every selected channel failed permanently". Answering 502
 // invites generic 5xx retry machinery to hammer a request that cannot succeed
-// until channels.json is edited; 207 keeps it the visible config nag the
+// until channels.toml is edited; 207 keeps it the visible config nag the
 // design calls for.
 func TestNotifyDisabledChannelIsVisibleNag(t *testing.T) {
-	chans := `{"ntfy": {"type":"ntfy","server":"http://unused.invalid","topic":"t","enabled":false}}`
+	chans := "[ntfy]\ntype = \"ntfy\"\nserver = \"http://unused.invalid\"\ntopic = \"t\"\nenabled = false\n"
 	s := newTestServer(t, "", chans)
 	rec, body := post(t, s.PublicMux(), "/v1/notify", devKey, `{"title":"a","message":"b"}`)
 	if rec.Code != http.StatusMultiStatus {

@@ -16,18 +16,24 @@ func write(t *testing.T, path, content string) {
 
 func TestLoadKeysStringAndArray(t *testing.T) {
 	dir := t.TempDir()
-	p := filepath.Join(dir, "keys.json")
-	write(t, p, `{
-		"claude": { "key": "nh_aaaaaaaaaaaaaaaa", "channels": ["ntfy","email"] },
-		"betty":  { "key": ["nh_bbbbbbbbbbbbbbbb","nh_cccccccccccccccc"], "channels": ["ntfy"] }
-	}`)
+	p := filepath.Join(dir, "keys.toml")
+	write(t, p, `
+[claude]
+key = "nh_aaaaaaaaaaaaaaaa"
+channels = ["ntfy", "email"]
+
+# Mid-rotation: both keys valid, same caller id in the log.
+[backup-host]
+key = ["nh_bbbbbbbbbbbbbbbb", "nh_cccccccccccccccc"]
+channels = ["ntfy"]
+`)
 	ring, err := LoadKeys(p)
 	if err != nil {
 		t.Fatal(err)
 	}
 	c, ok := ring.Lookup("nh_cccccccccccccccc")
-	if !ok || c.ID != "betty" {
-		t.Errorf("mid-rotation second key should resolve to betty, got %v %v", c, ok)
+	if !ok || c.ID != "backup-host" {
+		t.Errorf("mid-rotation second key should resolve to backup-host, got %v %v", c, ok)
 	}
 	c, _ = ring.Lookup("nh_aaaaaaaaaaaaaaaa")
 	if !c.Permitted("email") || c.Permitted("discord") {
@@ -37,27 +43,47 @@ func TestLoadKeysStringAndArray(t *testing.T) {
 
 func TestLoadKeysRejectsDuplicatesAndShortKeys(t *testing.T) {
 	dir := t.TempDir()
-	p := filepath.Join(dir, "keys.json")
-	write(t, p, `{
-		"a": { "key": "nh_dddddddddddddddd", "channels": [] },
-		"b": { "key": "nh_dddddddddddddddd", "channels": [] }
-	}`)
+	p := filepath.Join(dir, "keys.toml")
+	write(t, p, `
+[a]
+key = "nh_dddddddddddddddd"
+channels = []
+
+[b]
+key = "nh_dddddddddddddddd"
+channels = []
+`)
 	if _, err := LoadKeys(p); err == nil {
 		t.Error("duplicate key must be rejected")
 	}
-	write(t, p, `{"a": { "key": "short", "channels": [] }}`)
+	write(t, p, "[a]\nkey = \"short\"\nchannels = []\n")
 	if _, err := LoadKeys(p); err == nil {
 		t.Error("short key must be rejected")
 	}
 }
 
+func TestLoadKeysRejectsUnknownField(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "keys.toml")
+	write(t, p, "[a]\nkey = \"nh_aaaaaaaaaaaaaaaa\"\nchannels = []\nchannel = [\"ntfy\"]\n")
+	if _, err := LoadKeys(p); err == nil {
+		t.Error("a typo'd field must fail the load rather than be silently ignored")
+	}
+}
+
 func TestLoadChannelsEnabledField(t *testing.T) {
 	dir := t.TempDir()
-	p := filepath.Join(dir, "channels.json")
-	write(t, p, `{
-		"ntfy":    { "type": "ntfy", "topic": "x" },
-		"standby": { "type": "ntfy", "topic": "y", "enabled": false }
-	}`)
+	p := filepath.Join(dir, "channels.toml")
+	write(t, p, `
+[ntfy]
+type = "ntfy"
+topic = "x"
+
+[standby]
+type = "ntfy"
+topic = "y"
+enabled = false
+`)
 	set, err := LoadChannels(p)
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +94,7 @@ func TestLoadChannelsEnabledField(t *testing.T) {
 	}
 	ch, _ = set.Get("standby")
 	if ch.Enabled {
-		t.Error("enabled:false must disable")
+		t.Error("enabled = false must disable")
 	}
 	if ch.Adapter != nil {
 		t.Error("disabled channel must not be constructed (its config block is not validated)")
@@ -81,16 +107,22 @@ func TestLoadChannelsEnabledField(t *testing.T) {
 	}
 }
 
-// Parking a channel that has gone bad — enabled:false, stale settings
+// Parking a channel that has gone bad — enabled = false, stale settings
 // stripped — must not take the whole file, and every healthy channel with it,
 // out of service.
 func TestDisabledChannelWithBrokenConfigStillLoads(t *testing.T) {
 	dir := t.TempDir()
-	p := filepath.Join(dir, "channels.json")
-	write(t, p, `{
-		"good":    { "type": "ntfy", "topic": "x" },
-		"retired": { "type": "ntfy", "enabled": false }
-	}`)
+	p := filepath.Join(dir, "channels.toml")
+	write(t, p, `
+[good]
+type = "ntfy"
+topic = "x"
+
+# Parked after the topic leaked; settings stripped.
+[retired]
+type = "ntfy"
+enabled = false
+`)
 	set, err := LoadChannels(p)
 	if err != nil {
 		t.Fatalf("a disabled channel's incomplete config must not fail the load: %v", err)
@@ -100,34 +132,65 @@ func TestDisabledChannelWithBrokenConfigStillLoads(t *testing.T) {
 	}
 }
 
+// A parked channel's leftover settings are not validated, but they must not
+// read as unknown keys either — that would be the same "one bad block takes
+// the file down" failure by another route.
+func TestDisabledChannelKeepsUnvalidatedSettings(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "channels.toml")
+	write(t, p, `
+[standby]
+type = "ntfy"
+enabled = false
+topic = "still here"
+some_setting_that_no_longer_exists = 42
+`)
+	if _, err := LoadChannels(p); err != nil {
+		t.Errorf("a parked channel's stale settings must be tolerated: %v", err)
+	}
+}
+
 // A disabled block is still typo-checked on its type name — cheap, and it
 // catches the edit that would fail on re-enable.
 func TestDisabledChannelRejectsUnknownType(t *testing.T) {
 	dir := t.TempDir()
-	p := filepath.Join(dir, "channels.json")
-	write(t, p, `{"x": { "type": "carrier-pigeon", "enabled": false }}`)
+	p := filepath.Join(dir, "channels.toml")
+	write(t, p, "[x]\ntype = \"carrier-pigeon\"\nenabled = false\n")
 	if _, err := LoadChannels(p); err == nil {
 		t.Error("unknown adapter type must fail the load even when disabled")
 	}
 }
 
+// JSON kept the last of two same-named blocks and silently dropped the first,
+// so a copy-pasted caller lost its key on what logged as a clean reload. TOML
+// rejects duplicate keys at the parser, which is the guarantee relied on here.
 func TestDuplicateIDsRejected(t *testing.T) {
 	dir := t.TempDir()
 
-	keys := filepath.Join(dir, "keys.json")
-	write(t, keys, `{
-		"betty": { "key": "nh_first_key_0123456789", "channels": ["ntfy"] },
-		"betty": { "key": "nh_second_key_012345678", "channels": ["ntfy"] }
-	}`)
+	keys := filepath.Join(dir, "keys.toml")
+	write(t, keys, `
+[backup-host]
+key = "nh_first_key_0123456789"
+channels = ["ntfy"]
+
+[backup-host]
+key = "nh_second_key_012345678"
+channels = ["ntfy"]
+`)
 	if _, err := LoadKeys(keys); err == nil {
 		t.Error("a repeated caller id must fail the load, not silently drop the first block's keys")
 	}
 
-	chans := filepath.Join(dir, "channels.json")
-	write(t, chans, `{
-		"ntfy": { "type": "ntfy", "topic": "x" },
-		"ntfy": { "type": "ntfy", "topic": "y" }
-	}`)
+	chans := filepath.Join(dir, "channels.toml")
+	write(t, chans, `
+[ntfy]
+type = "ntfy"
+topic = "x"
+
+[ntfy]
+type = "ntfy"
+topic = "y"
+`)
 	if _, err := LoadChannels(chans); err == nil {
 		t.Error("a repeated channel id must fail the load")
 	}
@@ -135,19 +198,30 @@ func TestDuplicateIDsRejected(t *testing.T) {
 
 func TestLoadChannelsRejectsUnknownType(t *testing.T) {
 	dir := t.TempDir()
-	p := filepath.Join(dir, "channels.json")
-	write(t, p, `{"x": { "type": "carrier-pigeon" }}`)
+	p := filepath.Join(dir, "channels.toml")
+	write(t, p, "[x]\ntype = \"carrier-pigeon\"\n")
 	if _, err := LoadChannels(p); err == nil {
 		t.Error("unknown adapter type must fail the load")
 	}
 }
 
+// An adapter's own settings are deferred-decoded, so the unknown-key check has
+// to run after every block is built or a typo'd credential silently vanishes.
+func TestLoadChannelsRejectsUnknownAdapterSetting(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "channels.toml")
+	write(t, p, "[ntfy]\ntype = \"ntfy\"\ntopic = \"x\"\ntoken_typo = \"tk_secret\"\n")
+	if _, err := LoadChannels(p); err == nil {
+		t.Error("a typo'd adapter setting must fail the load, not be silently dropped")
+	}
+}
+
 // The channel id names the spool directory. `".."` pointed a channel's spool
-// at the config directory, where the drain scan read keys.json and
-// channels.json as long-expired items and deleted them.
+// at the config directory, where the drain scan read keys.toml and
+// channels.toml as long-expired items and deleted them.
 func TestLoadChannelsRejectsUnsafeIDs(t *testing.T) {
 	dir := t.TempDir()
-	p := filepath.Join(dir, "channels.json")
+	p := filepath.Join(dir, "channels.toml")
 	for name, id := range map[string]string{
 		"parent":    "..",
 		"self":      ".",
@@ -157,7 +231,7 @@ func TestLoadChannelsRejectsUnsafeIDs(t *testing.T) {
 		"backslash": `ntfy\prod`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			write(t, p, fmt.Sprintf(`{%q: { "type": "ntfy", "topic": "x" }}`, id))
+			write(t, p, fmt.Sprintf("[%q]\ntype = \"ntfy\"\ntopic = \"x\"\n", id))
 			if _, err := LoadChannels(p); err == nil {
 				t.Errorf("channel id %q must fail the load: it is joined straight into a filesystem path", id)
 			}
@@ -174,10 +248,10 @@ func TestReloadRetriedAfterTransientFailure(t *testing.T) {
 		t.Skip("root ignores file permissions")
 	}
 	dir := t.TempDir()
-	keys := filepath.Join(dir, "keys.json")
-	chans := filepath.Join(dir, "channels.json")
-	write(t, keys, `{"a": { "key": "nh_aaaaaaaaaaaaaaaa", "channels": ["ntfy"] }}`)
-	write(t, chans, `{"ntfy": { "type": "ntfy", "topic": "x" }}`)
+	keys := filepath.Join(dir, "keys.toml")
+	chans := filepath.Join(dir, "channels.toml")
+	write(t, keys, "[a]\nkey = \"nh_aaaaaaaaaaaaaaaa\"\nchannels = [\"ntfy\"]\n")
+	write(t, chans, "[ntfy]\ntype = \"ntfy\"\ntopic = \"x\"\n")
 
 	store, err := NewStore(&Config{KeysFile: keys, ChannelsFile: chans})
 	if err != nil {
@@ -186,7 +260,7 @@ func TestReloadRetriedAfterTransientFailure(t *testing.T) {
 
 	// Revoke the leaked key, then make the read fail. chmod moves ctime, not
 	// mtime, so the poll still sees exactly one content change.
-	write(t, keys, `{"b": { "key": "nh_bbbbbbbbbbbbbbbb", "channels": ["ntfy"] }}`)
+	write(t, keys, "[b]\nkey = \"nh_bbbbbbbbbbbbbbbb\"\nchannels = [\"ntfy\"]\n")
 	store.keysMtime = mtime(keys).Add(-1) // force change detection
 	if err := os.Chmod(keys, 0o000); err != nil {
 		t.Fatal(err)
@@ -210,10 +284,10 @@ func TestReloadRetriedAfterTransientFailure(t *testing.T) {
 
 func TestStoreValidateBeforeSwap(t *testing.T) {
 	dir := t.TempDir()
-	keys := filepath.Join(dir, "keys.json")
-	chans := filepath.Join(dir, "channels.json")
-	write(t, keys, `{"a": { "key": "nh_aaaaaaaaaaaaaaaa", "channels": ["ntfy"] }}`)
-	write(t, chans, `{"ntfy": { "type": "ntfy", "topic": "x" }}`)
+	keys := filepath.Join(dir, "keys.toml")
+	chans := filepath.Join(dir, "channels.toml")
+	write(t, keys, "[a]\nkey = \"nh_aaaaaaaaaaaaaaaa\"\nchannels = [\"ntfy\"]\n")
+	write(t, chans, "[ntfy]\ntype = \"ntfy\"\ntopic = \"x\"\n")
 
 	store, err := NewStore(&Config{KeysFile: keys, ChannelsFile: chans})
 	if err != nil {
@@ -221,15 +295,15 @@ func TestStoreValidateBeforeSwap(t *testing.T) {
 	}
 
 	// Break the keys file: a half-written hand-edit must NOT blank creds.
-	write(t, keys, `{"a": { "key": "nh_aaaaaaaa`) // truncated JSON
-	store.keysMtime = mtime(keys).Add(-1)         // force change detection
+	write(t, keys, "[a]\nkey = \"nh_aaaaaaaa") // truncated mid-string
+	store.keysMtime = mtime(keys).Add(-1)      // force change detection
 	store.pollOnce()
 	if _, ok := store.Keyring().Lookup("nh_aaaaaaaaaaaaaaaa"); !ok {
 		t.Error("broken keys file must keep the previous keyring")
 	}
 
 	// Fix it with a new caller: swap should now happen.
-	write(t, keys, `{"b": { "key": "nh_bbbbbbbbbbbbbbbb", "channels": [] }}`)
+	write(t, keys, "[b]\nkey = \"nh_bbbbbbbbbbbbbbbb\"\nchannels = []\n")
 	store.keysMtime = mtime(keys).Add(-1)
 	store.pollOnce()
 	if _, ok := store.Keyring().Lookup("nh_bbbbbbbbbbbbbbbb"); !ok {
@@ -244,32 +318,73 @@ func TestStoreValidateBeforeSwap(t *testing.T) {
 // runtime as-is — and a zero rate cap, attempt timeout or spool cap each break
 // the hub in a way nothing alerts on.
 func TestLoadConfigRejectsNonPositiveKnobs(t *testing.T) {
-	base := `"publicPort": 8080`
+	const base = "public_port = 8080\n"
 	cases := map[string]string{
-		"rateCapPerHour":     `"rateCapPerHour": 0`,
-		"spoolCapPerChannel": `"spoolCapPerChannel": 0`,
-		"attemptTimeout":     `"attemptTimeout": "0s"`,
-		"responseWindow":     `"responseWindow": "0s"`,
-		"queueTTL":           `"queueTTL": "0s"`,
-		"drainPace":          `"drainPace": "0s"`,
+		"rate_cap_per_hour":     `rate_cap_per_hour = 0`,
+		"spool_cap_per_channel": `spool_cap_per_channel = 0`,
+		"attempt_timeout":       `attempt_timeout = "0s"`,
+		"response_window":       `response_window = "0s"`,
+		"queue_ttl":             `queue_ttl = "0s"`,
+		"drain_pace":            `drain_pace = "0s"`,
 	}
 	for name, field := range cases {
 		dir := t.TempDir()
-		p := filepath.Join(dir, "config.json")
-		write(t, p, "{"+base+", "+field+"}")
+		p := filepath.Join(dir, "hubbub.toml")
+		write(t, p, base+field+"\n")
 		if _, err := LoadConfig(p); err == nil {
 			t.Errorf("%s = 0 must be rejected at load", name)
 		}
 	}
 
 	dir := t.TempDir()
-	p := filepath.Join(dir, "config.json")
-	write(t, p, "{"+base+"}")
+	p := filepath.Join(dir, "hubbub.toml")
+	write(t, p, base)
 	cfg, err := LoadConfig(p)
 	if err != nil {
 		t.Fatalf("a minimal config must still load: %v", err)
 	}
 	if cfg.RateCapPerHour != 60 {
-		t.Errorf("rateCapPerHour = %d, want the 60 default when absent", cfg.RateCapPerHour)
+		t.Errorf("rate_cap_per_hour = %d, want the 60 default when absent", cfg.RateCapPerHour)
+	}
+}
+
+func TestLoadConfigRejectsUnknownSetting(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "hubbub.toml")
+	write(t, p, "public_port = 8080\nrate_cap_per_hor = 60\n")
+	if _, err := LoadConfig(p); err == nil {
+		t.Error("a typo'd setting must fail the load rather than silently take its default")
+	}
+}
+
+// Comments are the whole reason for the format change; make sure a realistic
+// commented file actually parses, including the presence-enabled tables.
+func TestLoadConfigWithCommentsAndTables(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "hubbub.toml")
+	write(t, p, `
+# hubbub config
+public_port = 8080      # caller-facing API
+response_window = "2.5s"
+
+[ops]
+port = 2112             # keep off the public internet
+
+[heartbeat]
+url = "https://hc-ping.com/uuid"
+# interval omitted on purpose: it should default
+`)
+	cfg, err := LoadConfig(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Ops == nil || cfg.Ops.Port != 2112 {
+		t.Errorf("ops = %+v, want port 2112", cfg.Ops)
+	}
+	if cfg.Heartbeat == nil || cfg.Heartbeat.Interval.Duration <= 0 {
+		t.Errorf("heartbeat = %+v, want a defaulted interval", cfg.Heartbeat)
+	}
+	if cfg.ResponseWindow.Duration.String() != "2.5s" {
+		t.Errorf("response_window = %v, want 2.5s", cfg.ResponseWindow)
 	}
 }

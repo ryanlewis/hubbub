@@ -103,7 +103,7 @@ func safeSpoolName(id string) bool {
 //
 // Returns an error naming the channels whose spool could not be initialised.
 // They stay wanted — Enqueue retries the init rather than leaving the channel
-// dead until channels.json next changes.
+// dead until channels.toml next changes.
 func (e *Engine) SetChannels(chs []ChannelRuntime) error {
 	e.mu.Lock()
 
@@ -322,7 +322,7 @@ func (e *Engine) Enqueue(n notify.Notification, channel string, test bool) error
 		// The channel is configured and enabled but has no worker, which means
 		// its spool init failed earlier (disk full, wrong ownership after a
 		// deploy). Retry now — otherwise the channel stays dead until
-		// channels.json next changes, and every notification for it is lost
+		// channels.toml next changes, and every notification for it is lost
 		// rather than queued.
 		if ch, wanted := e.wanted[channel]; wanted && ch.Enabled {
 			var err error

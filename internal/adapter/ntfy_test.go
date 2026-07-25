@@ -10,13 +10,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/ryanlewis/hubbub/internal/notify"
 )
 
+// cfgFrom builds the Decode an adapter factory is handed. The config package
+// supplies the real one; adapters never see the format themselves, so the
+// test just needs something that fills their struct.
+func cfgFrom(doc string) Decode {
+	return func(v any) error {
+		_, err := toml.Decode(doc, v)
+		return err
+	}
+}
+
 func ntfyFor(t *testing.T, srvURL string) Adapter {
 	t.Helper()
-	cfg := `{"type":"ntfy","server":"` + srvURL + `","topic":"tst","token":"tk_x"}`
-	a, err := New("ntfy", "ntfy", json.RawMessage(cfg))
+	cfg := "server = \"" + srvURL + "\"\ntopic = \"tst\"\ntoken = \"tk_x\"\n"
+	a, err := New("ntfy", "ntfy", cfgFrom(cfg))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +116,7 @@ func TestNtfyTruncatesLongMessage(t *testing.T) {
 }
 
 func TestNtfyRejectsMissingTopic(t *testing.T) {
-	if _, err := New("ntfy", "x", json.RawMessage(`{"type":"ntfy"}`)); err == nil {
+	if _, err := New("ntfy", "x", cfgFrom("")); err == nil {
 		t.Error("missing topic must fail validation")
 	}
 }

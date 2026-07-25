@@ -1,0 +1,21 @@
+# Channel instances. The table name is the channel id that permissions and
+# per-channel results refer to; `type` picks the adapter. Several instances of
+# one type are fine, and the id is a stable indirection — the technology behind
+# a channel can change without touching any caller's permission list.
+
+[ntfy]
+type = "ntfy"
+server = "https://ntfy.sh"
+# On the public ntfy.sh instance the topic name IS the secret: anyone who knows
+# it can both read your notifications and publish to it. Use an unguessable one
+# and an access token, or self-host.
+topic = "CHANGE-ME-unguessable-topic"
+token = ""
+
+# enabled = false parks a channel without deleting its credentials, and a
+# parked block is not validated — so you can strip a dead channel's settings
+# without taking the rest of this file down with it.
+#
+# [standby]
+# type = "ntfy"
+# enabled = false

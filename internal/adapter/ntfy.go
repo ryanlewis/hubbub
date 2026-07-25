@@ -21,20 +21,17 @@ import (
 const ntfyMaxMessageBytes = 4096
 
 func init() {
-	Register("ntfy", func(id string, cfg json.RawMessage) (Adapter, error) {
-		return newNtfy(id, cfg)
+	Register("ntfy", func(id string, decode Decode) (Adapter, error) {
+		return newNtfy(id, decode)
 	})
 }
 
+// ntfyConfig carries only this adapter's own settings. `type` and `enabled`
+// belong to the instance envelope and are consumed by the config loader.
 type ntfyConfig struct {
-	// Type and Enabled belong to the instance envelope; tolerated here so
-	// the factory can decode the whole block strictly.
-	Type    string `json:"type"`
-	Enabled *bool  `json:"enabled"`
-
-	Server string `json:"server"`
-	Topic  string `json:"topic"`
-	Token  string `json:"token"`
+	Server string `toml:"server"`
+	Topic  string `toml:"topic"`
+	Token  string `toml:"token"`
 }
 
 type ntfyAdapter struct {
@@ -45,11 +42,9 @@ type ntfyAdapter struct {
 	client *http.Client
 }
 
-func newNtfy(id string, cfg json.RawMessage) (*ntfyAdapter, error) {
-	dec := json.NewDecoder(bytes.NewReader(cfg))
-	dec.DisallowUnknownFields()
+func newNtfy(id string, decode Decode) (*ntfyAdapter, error) {
 	var c ntfyConfig
-	if err := dec.Decode(&c); err != nil {
+	if err := decode(&c); err != nil {
 		return nil, fmt.Errorf("channel %q (ntfy): %w", id, err)
 	}
 	if c.Server == "" {

@@ -734,7 +734,7 @@ func TestEngineRefusesUnsafeChannelIDs(t *testing.T) {
 }
 
 // A spool that won't initialise (disk full, wrong ownership after a deploy)
-// used to leave the channel dead until channels.json next changed, 502-ing
+// used to leave the channel dead until channels.toml next changed, 502-ing
 // and dropping every notification in the meantime.
 func TestEnqueueRetriesFailedSpoolInit(t *testing.T) {
 	dir := t.TempDir()

@@ -1,0 +1,43 @@
+# hubbub configuration. Read once at startup — restart to apply changes here.
+# The keys and channels files below are hot-reloaded on change.
+#
+# TOML note: every setting below belongs to the top level, so they all have to
+# come BEFORE the first [table] header — anything after [ops] would be read as
+# ops.<setting> and rejected as unknown.
+
+public_port = 8080
+
+# Global blast-radius guard across all keys, not accounting. Must be >= 1.
+# A runaway caller melts your phone and burns the upstream's rate limit for
+# every other caller, so there is deliberately no "unlimited" setting.
+rate_cap_per_hour = 60
+
+# How long a request waits on delivery outcomes before answering with
+# whatever is known. Worst-case response latency is exactly this.
+response_window = "2.5s"
+
+# Outbox tuning. A message that can't be delivered within queue_ttl is dropped
+# (with a log line); when a channel's spool is full the oldest is evicted,
+# because fresh news beats stale news.
+queue_ttl = "6h"
+spool_dir = "example/spool"
+spool_cap_per_channel = 100
+drain_pace = "2s"        # gap between sends when draining a backlog
+attempt_timeout = "10s"  # per-attempt timeout handed to the adapter
+
+delivery_log = "example/delivery.log"
+keys_file = "example/keys.toml"
+channels_file = "example/channels.toml"
+
+# Presence-enabled: delete this table and no ops listener comes up at all.
+# Bind it somewhere the internet cannot reach — that placement IS the access
+# control for /metrics and the test CTA, which carry no auth of their own.
+[ops]
+port = 2112
+
+# Dead-man's switch. Any provider works — the URL is just pinged on a timer,
+# and each tick is gated on hubbub probing its own listener first, so a wedged
+# process trips the switch instead of staying invisibly green.
+# [heartbeat]
+# url = "https://hc-ping.com/your-uuid-here"
+# interval = "60s"

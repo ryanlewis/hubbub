@@ -26,7 +26,7 @@ hubbub inverts that. Channel credentials live in one place. Callers get their
 own named key, and that key's channel list is its permission boundary. Adding a
 channel is a config block; revoking a caller is deleting a line.
 
-It is deliberately small: stdlib-only Go, one static binary, flat files. No
+It is deliberately small: one static binary, flat files, a single dependency. No
 database, no runtime to install, no build chain.
 
 ## Status
@@ -69,11 +69,11 @@ cd hubbub
 go build -o hubbub .
 ```
 
-Point `example/channels.json` at a real ntfy topic (pick an unguessable one —
+Point `example/channels.toml` at a real ntfy topic (pick an unguessable one —
 on the public ntfy.sh instance the topic name *is* the secret), then:
 
 ```sh
-./hubbub -config example/config.json
+./hubbub -config example/hubbub.toml
 ```
 
 ```sh
@@ -93,51 +93,67 @@ curl -s -X POST localhost:2112/test/ntfy
 
 ## Configuration
 
-Three files. All are hot-reloaded on change except `config.json`, which is read
-at startup. Reloads are validate-before-swap: a broken hand-edit logs an error
-and keeps the previous configuration rather than blanking your credentials.
+Three TOML files. All are hot-reloaded on change except `hubbub.toml`, which is
+read at startup. Reloads are validate-before-swap: a broken hand-edit logs an
+error and keeps the previous configuration rather than blanking your
+credentials.
 
-### `config.json`
+TOML because these are files a human edits under pressure, and being able to
+write down *why* a channel is parked or which machine a key belongs to — next
+to the thing itself — is worth more than the config format being exotic. A typo'd
+key fails the load rather than silently taking its default, and duplicate names
+are rejected by the parser.
 
-```json
-{
-  "publicPort": 8080,
-  "ops": { "port": 2112 },
-  "rateCapPerHour": 60,
-  "responseWindow": "2.5s",
-  "queueTTL": "6h",
-  "spoolDir": "spool",
-  "spoolCapPerChannel": 100,
-  "drainPace": "2s",
-  "attemptTimeout": "10s",
-  "heartbeat": { "url": "https://hc-ping.com/...", "interval": "60s" },
-  "deliveryLog": "delivery.log",
-  "keysFile": "keys.json",
-  "channelsFile": "channels.json"
-}
+### `hubbub.toml`
+
+```toml
+public_port = 8080
+rate_cap_per_hour = 60      # global blast-radius guard; must be >= 1
+response_window = "2.5s"
+queue_ttl = "6h"
+spool_dir = "spool"
+spool_cap_per_channel = 100
+drain_pace = "2s"
+attempt_timeout = "10s"
+delivery_log = "delivery.log"
+keys_file = "keys.toml"
+channels_file = "channels.toml"
+
+# Presence-enabled: delete the table and no ops listener comes up.
+[ops]
+port = 2112
+
+[heartbeat]
+url = "https://hc-ping.com/..."
+interval = "60s"
 ```
 
 | Field | Default | Meaning |
 |---|---|---|
-| `publicPort` | `8080` | Caller-facing API |
-| `ops` | *(absent)* | Presence-enabled. Brings up a second listener for `/metrics`, `/health` and the test CTA |
-| `rateCapPerHour` | `60` | Global cap across all keys. Must be ≥ 1 — there is no "unlimited" |
-| `responseWindow` | `2.5s` | How long a request waits on delivery outcomes |
-| `queueTTL` | `6h` | How long an undeliverable message stays queued before it's dropped |
-| `spoolCapPerChannel` | `100` | Pending messages per channel; over cap, the oldest is evicted |
-| `drainPace` | `2s` | Gap between sends when draining a backlog |
-| `attemptTimeout` | `10s` | Per-attempt timeout handed to the adapter |
-| `heartbeat` | *(absent)* | Dead-man's-switch ping target. Any provider works. Absent logs a startup warning — it is the only thing that notices a dead process, VM or outbound path |
+| `public_port` | `8080` | Caller-facing API |
+| `[ops]` | *(absent)* | Presence-enabled. Brings up a second listener for `/metrics`, `/health` and the test CTA |
+| `rate_cap_per_hour` | `60` | Global cap across all keys. Must be ≥ 1 — there is no "unlimited" |
+| `response_window` | `2.5s` | How long a request waits on delivery outcomes |
+| `queue_ttl` | `6h` | How long an undeliverable message stays queued before it's dropped |
+| `spool_cap_per_channel` | `100` | Pending messages per channel; over cap, the oldest is evicted |
+| `drain_pace` | `2s` | Gap between sends when draining a backlog |
+| `attempt_timeout` | `10s` | Per-attempt timeout handed to the adapter |
+| `[heartbeat]` | *(absent)* | Dead-man's-switch ping target. Any provider works. Absent logs a startup warning — it is the only thing that notices a dead process, VM or outbound path |
 
-Durations are strings (`"30s"`, `"2.5s"`, `"6h"`). Unknown fields are rejected.
+Durations are strings (`"30s"`, `"2.5s"`, `"6h"`), since TOML has no duration
+type. Unknown settings are rejected.
 
-### `keys.json` — callers and permissions
+### `keys.toml` — callers and permissions
 
-```json
-{
-  "cron":  { "key": "nh_...", "channels": ["ntfy", "email"] },
-  "backup-host": { "key": ["nh_old...", "nh_new..."], "channels": ["ntfy"] }
-}
+```toml
+[cron]
+key = "nh_..."
+channels = ["ntfy", "email"]
+
+# Mid-rotation: both keys valid until the caller is flipped over.
+[backup-host]
+key = ["nh_old...", "nh_new..."]
+channels = ["ntfy"]
 ```
 
 The `channels` list is the caller's **permission boundary and its delivery
@@ -147,16 +163,22 @@ set**. A key permitted `["ntfy","email"]` reaches both.
 outage window. Both map to the same caller id in the delivery log. Generate keys
 from a CSPRNG (`openssl rand -hex 24`); they must be at least 16 characters.
 
-### `channels.json` — where credentials live
+### `channels.toml` — where credentials live
 
-```json
-{
-  "ntfy":    { "type": "ntfy", "server": "https://ntfy.sh", "topic": "...", "token": "tk_..." },
-  "standby": { "type": "ntfy", "topic": "...", "enabled": false }
-}
+```toml
+[ntfy]
+type = "ntfy"
+server = "https://ntfy.sh"
+topic = "unguessable-topic"
+token = "tk_..."
+
+# Parked after the topic leaked. Credentials kept; re-enabling is one line.
+[standby]
+type = "ntfy"
+enabled = false
 ```
 
-The entry key is the channel id that permissions and results refer to; `type`
+The table name is the channel id that permissions and results refer to; `type`
 picks the adapter. Several instances of one type are fine. Because the id is a
 stable indirection, the technology behind `email` can change without touching
 any caller's permission list.
@@ -165,9 +187,9 @@ The id also names the channel's spool directory, so it must be a single safe
 path component: letters, digits, `-`, `_` and `.`, up to 64 characters, and
 never `.` or `..`. Anything else fails the load.
 
-`"enabled": false` parks a channel without deleting its credentials, and a
-disabled block isn't validated — so you can strip a dead channel's settings
-without taking the rest of the file down with it.
+`enabled = false` parks a channel without deleting its credentials, and a parked
+block isn't validated — so you can strip a dead channel's settings without
+taking the rest of the file down with it.
 
 **Enabling a channel grants no key anything.** New channels are deny-by-default
 until a key's permission list names them, so turning on Discord never silently
@@ -238,7 +260,7 @@ own record of what happened.
 A `disabled` channel was never attempted, so it is not a permanent failure: a
 selection that is entirely disabled answers `207`, not `502`. That keeps it a
 visible config nag instead of inviting generic 5xx retry machinery to hammer a
-request that cannot succeed until `channels.json` is edited.
+request that cannot succeed until `channels.toml` is edited.
 
 A `202` is settled later in the delivery log, not over HTTP — a queued message
 that eventually expires shows up there and in `/metrics`.
@@ -301,7 +323,7 @@ Channel-level failure is deliberately *not* the dead-man's job — one broken
 channel shouldn't declare the whole hub dead. That's what `/metrics` and the
 test CTA are for.
 
-**The habit worth keeping:** end every `channels.json` edit by firing
+**The habit worth keeping:** end every `channels.toml` edit by firing
 `POST /test/{channel}` and watching the notification arrive. It's the only check
 that catches a typo'd topic delivering cheerfully into a stranger's channel, or
 a push that the upstream accepted but your phone never showed.
@@ -321,7 +343,7 @@ Checklist for a real deployment:
 - `logrotate` for the delivery log
 - The ops port bound somewhere the internet cannot reach
 - A dead-man's-switch ping target configured
-- An **encrypted off-host backup of `keys.json` and `channels.json`** — they are
+- An **encrypted off-host backup of `keys.toml` and `channels.toml`** — they are
   the only state that hurts to lose, and losing them means re-issuing every
   caller's key and re-finding every webhook URL
 - A first test-CTA fire against every enabled channel
@@ -340,8 +362,10 @@ go vet ./...
 
 Two rules the codebase holds to:
 
-1. **Stdlib only.** `go.mod` stays dependency-free. The planned `exec` adapter
-   is the extension point, not third-party libraries.
+1. **Effectively stdlib.** The only dependency is `BurntSushi/toml`, which is
+   itself dependency-free, so the whole module graph is two entries. Anything
+   further needs a real justification: the planned `exec` adapter is the
+   extension point for new behaviour, not third-party libraries.
 2. **Platform-agnostic core.** Anything tied to a specific host or provider is an
    adapter or a config value, never baked into the core.
 

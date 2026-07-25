@@ -23,7 +23,7 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "config.json", "path to config.json")
+	configPath := flag.String("config", "hubbub.toml", "path to the config file")
 	flag.Parse()
 
 	if err := run(*configPath); err != nil {
