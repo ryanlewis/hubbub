@@ -1,5 +1,4 @@
 // hubbub: a tiny self-hosted notification fan-out hub.
-// Design source of truth: ~/dev/notes/projects/hubbub/design.md
 package main
 
 import (
