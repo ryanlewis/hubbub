@@ -17,6 +17,12 @@ import (
 //go:embed index.html docs.html theme.html llms.txt
 var pages embed.FS
 
+// Embedded separately from pages: it is served as bytes, never templated, and
+// putting it in the FS as well would carry a second copy in the binary.
+//
+//go:embed favicon.svg
+var faviconSVG []byte
+
 // pageData is the only part of the landing page and llms.txt that cannot be
 // written down at build time: where this hub is reached and which binary is
 // answering. Both are properties of the deployment rather than of hubbub, which
@@ -72,6 +78,22 @@ func handleLLMsTxt(w http.ResponseWriter, r *http.Request) {
 	// job is to render wherever it is fetched, and text/markdown makes some
 	// browsers offer a download instead of showing it.
 	renderPageTemplate(w, tmpl, "llms.txt", data, "text/plain; charset=utf-8")
+}
+
+// handleFavicon serves the tab icon.
+//
+// SVG only, and no /favicon.ico: every browser that has shipped in the last few
+// years takes the <link> to an SVG, and the alternative is either a
+// hand-assembled ICO container or a second copy of the mark drawn again in Go
+// to rasterise — two descriptions of one icon, which is the shape of thing that
+// drifts. A client old enough to ignore it falls back to a blank tab, which is
+// where this started.
+func handleFavicon(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/svg+xml")
+	// Fixed for the life of the binary and re-requested on every page load and
+	// tab restore — the one asset here where revalidation is pure waste.
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = w.Write(faviconSVG)
 }
 
 // renderPageTemplate executes one named template from a set and writes it.

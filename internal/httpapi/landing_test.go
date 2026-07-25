@@ -53,6 +53,35 @@ func TestLandingTemplatesParse(t *testing.T) {
 	}
 }
 
+// TestFaviconIsServedAndLinked. A favicon only works if three things agree:
+// the asset is served, both pages point at it, and the CSP on /docs permits an
+// image at all — and a CSP that forbids it fails silently, as a blank tab with
+// the explanation buried in a console nobody has open.
+func TestFaviconIsServedAndLinked(t *testing.T) {
+	s := landingServer(t)
+
+	rec := fetch(t, s, "/favicon.svg", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /favicon.svg = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "image/svg+xml" {
+		t.Errorf("content-type = %q, want image/svg+xml", ct)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "<svg") {
+		t.Errorf("body is not an SVG: %.60q", body)
+	}
+
+	for _, path := range []string{"/", "/docs"} {
+		if !strings.Contains(fetch(t, s, path, nil).Body.String(), `href="/favicon.svg"`) {
+			t.Errorf("GET %s does not link the favicon", path)
+		}
+	}
+
+	if csp := fetch(t, s, "/docs", nil).Header().Get("Content-Security-Policy"); !strings.Contains(csp, "img-src 'self'") {
+		t.Errorf("the docs CSP would block its own favicon: %s", csp)
+	}
+}
+
 func TestLandingPageIsServedAtRootAndIndexHTML(t *testing.T) {
 	s := landingServer(t)
 

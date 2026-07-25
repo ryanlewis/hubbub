@@ -104,9 +104,12 @@ func (s *Server) handleDocs(w http.ResponseWriter, r *http.Request) {
 	// caller's key is typed in, so it is the one worth spending a header on.
 	// Fresh per request — a fixed nonce is the same as no nonce.
 	view.Nonce = rand.Text()
+	// img-src is what the favicon needs: under default-src 'none' the tab icon
+	// is an image fetch like any other, and the browser drops it silently —
+	// a blank tab with the answer only in the console.
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; "+
 		"script-src 'nonce-"+view.Nonce+"'; style-src 'nonce-"+view.Nonce+"'; "+
-		"connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'")
+		"img-src 'self'; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 
 	renderPageTemplate(w, tmpl, "docs.html", view, "text/html; charset=utf-8")

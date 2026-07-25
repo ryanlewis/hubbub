@@ -59,6 +59,7 @@ func (s *Server) PublicMux() *http.ServeMux {
 	mux.HandleFunc("GET /{$}", handleIndex)
 	mux.HandleFunc("GET /index.html", handleIndex)
 	mux.HandleFunc("GET /llms.txt", handleLLMsTxt)
+	mux.HandleFunc("GET /favicon.svg", handleFavicon)
 	// The browsable reference. Rendered from the same resolved spec, so it can
 	// only ever show what /openapi.json already says.
 	mux.HandleFunc("GET /docs", s.handleDocs)
