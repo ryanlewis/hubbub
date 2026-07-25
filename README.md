@@ -97,6 +97,10 @@ The API describes itself, including the channel ids this instance has:
 curl -s localhost:8080/openapi.json
 ```
 
+A browser pointed at `http://localhost:8080/` gets a short human-readable
+version of the same contract, `/docs` gets a browsable reference you can fire
+requests from, and `/llms.txt` gets it condensed for an agent.
+
 ## Configuration
 
 Three TOML files. All are hot-reloaded on change except `hubbub.toml`, which is
@@ -292,6 +296,64 @@ request through the live mux, and pins the documented field set, priority enum
 and status codes to what the code actually does. Adding a request field without
 documenting it fails the suite.
 
+### `GET /docs`
+
+The browsable API reference — endpoint list, request and response schemas with
+their constraints, every documented status, and a panel that fires a real
+request against this hub.
+
+It is **rendered from the spec on every load**, never maintained beside it. The
+page can't document an endpoint the spec lacks or omit one it has, and the
+field table is generated from the schemas rather than typed out, so a new field
+appears there the moment it appears in the contract.
+
+It is deliberately not Swagger UI, Redoc or Scalar. Those are 0.8–3.6 MB of
+vendored minified JavaScript to render a five-endpoint API, against a design
+whose one sanctioned browser asset is ~14 kB of HTMX — and a docs page that
+takes a bearer key is the last place to want a third-party bundle, CDN-hosted or
+not. Server-rendering with `html/template`, already linked in for the landing
+page, adds nothing to the binary and keeps the module graph at two entries.
+
+The **Send** button is real: on a notification hub, "try it out" means an actual
+push, a line in the delivery log and one of the hourly rate cap. The panel says
+so. The key is typed per session into a password field, kept in the tab, never
+written to `localStorage` or a cookie, and sent to nothing but this hub — the
+request is same-origin and relative, so it can't follow the spec's `servers` URL
+somewhere else.
+
+This is the one page in hubbub where a credential is entered, so it is the one
+that carries a `Content-Security-Policy`: `default-src 'none'` with a
+per-request nonce for its own inline script and style, and `connect-src 'self'`.
+A test asserts the nonce changes between requests — a fixed one would be no
+better than `'unsafe-inline'`.
+
+Unlike `/` and `/llms.txt`, this page *does* reflect the deployment: it renders
+the spec, so it shows the configured channel ids, exactly as `/openapi.json`
+already does.
+
+### `GET /` and `GET /llms.txt`
+
+Two unauthenticated descriptions of the same contract, for the readers who
+arrive without a key: a person who opened the base URL in a browser, and an
+agent handed the host and nothing else. `/` is a small self-contained HTML page
+(also served at `/index.html`); `/llms.txt` follows the
+[llms.txt convention](https://llmstxt.org) — markdown, served as `text/plain`
+so it renders wherever it's fetched rather than prompting a download.
+
+Both name the host they were reached on, so the `curl` example on the page is
+copy-pasteable as-is, and both are pinned by tests to the status codes the spec
+documents. The response contract is now written down in three places, and the
+copy nobody re-reads is the one that rots.
+
+**They describe the API, never the deployment behind it.** No channel ids, no
+caller ids, no ops endpoints — the two handlers are the only ones in the package
+that don't take the server, which is the cheapest way to guarantee they have
+nothing to leak. `/openapi.json` is the endpoint that *does* reflect this
+particular hub, and the one to point an agent at.
+
+The page carries `noindex`: a private hub gains nothing from being in a search
+index. Delete the meta tag if yours should be findable.
+
 ### Ops endpoints
 
 Served on the ops port, which is intended to sit somewhere the internet can't
@@ -402,7 +464,8 @@ Two rules the codebase holds to:
 - [x] Outbox delivery engine — spool, serial workers, wait-window responses
 - [x] JSONL delivery log, `/health`, `/metrics` + ops port, test-send CTA
 - [x] Self-probing dead-man's-switch heartbeat
-- [x] `GET /openapi.json` — served spec so an agent can be pointed at the base URL
+- [x] `GET /openapi.json` — served spec so an agent can be pointed at the base
+      URL, plus `/`, `/docs` and `/llms.txt` for readers who arrive without a key
 - [ ] `exec` adapter — shell-out channels, no rebuild required
 - [ ] Email and Discord adapters
 - [ ] Per-key rate caps and idempotency keys

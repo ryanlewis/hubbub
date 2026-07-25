@@ -1,0 +1,68 @@
+# hubbub
+
+> Self-hosted notification fan-out hub. One authenticated JSON request in,
+> delivery to the operator's channels (phone push, email, and so on) out. This
+> is a private instance, not a public service: callers are issued a bearer key
+> by the operator and there is no signup. Without a key every endpoint that
+> matters answers 401.
+
+Base URL: {{.BaseURL}}
+Version: {{.Version}}
+
+If you have been handed a key and asked to send a notification, this is all you
+need:
+
+```
+curl -X POST {{.BaseURL}}/v1/notify \
+  -H 'Authorization: Bearer <your-key>' \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Backup failed","message":"nightly borg run exited 1","priority":"high"}'
+```
+
+Request fields:
+
+- `title` — required, max 256 bytes.
+- `message` — required, max 4096 bytes. Newlines and tabs survive; other control
+  characters are stripped at ingest.
+- `priority` — optional: `low`, `default`, `high`, `urgent`. Display only. It
+  never changes which channels fire.
+- `tags` — optional, max 16.
+- `channels` — optional. Narrows delivery to a subset of what the key permits
+  and can never widen it. Omit it to reach every channel the key permits;
+  naming one the key lacks is a 403, and an explicit `[]` is a 400 rather than a
+  fall-through to everything.
+
+Unknown top-level fields are rejected with a 400 rather than silently dropped,
+so a caller built against an older schema learns that it is stale.
+
+Branch on the HTTP status, not on prose in the body:
+
+- `200` `delivered` — every selected channel delivered inside the response window.
+- `202` `queued` — accepted and durably spooled, nothing delivered yet. A
+  promise, not a receipt: the outcome is written to the operator's delivery log
+  later, keyed by the `requestId` this call returned. Do not treat it as failure
+  and do not retry on it.
+- `207` `partial` — mixed. The per-channel map in the body says which was which.
+- `400` — malformed request.
+- `401` — missing or unknown key.
+- `403` — a named channel is not permitted for this key.
+- `429` `rate_capped` — global rate cap hit. Honour the `Retry-After` header.
+- `502` `failed` — every selected channel failed permanently. Retrying without
+  changing anything will fail the same way.
+
+The response body carries `result`, `requestId`, and a `channels` map of
+per-channel outcomes (`ok`, `queued`, `disabled`, `failed: <reason>`,
+`dropped: <reason>`).
+
+Delivery is at-least-once: a caller that times out and retries may double-send.
+The cost of a duplicate is a second phone buzz; the cost of a lost alert is
+worse.
+
+## Docs
+
+- [OpenAPI 3.1 spec]({{.BaseURL}}/openapi.json): the full machine-readable
+  contract, generated for this deployment — schemas, this instance's channel
+  ids, and every status the API can return. Unauthenticated.
+- [Health]({{.BaseURL}}/health): liveness, version and uptime. Unauthenticated.
+- [Source and README](https://github.com/ryanlewis/hubbub): the normative
+  user-facing contract, plus configuration and operational detail.

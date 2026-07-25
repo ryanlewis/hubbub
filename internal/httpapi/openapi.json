@@ -215,6 +215,66 @@
           }
         }
       }
+    },
+    "/docs": {
+      "get": {
+        "operationId": "docs",
+        "summary": "Browsable API reference.",
+        "description": "This document rendered as a page, with a panel for firing a real request against this hub. Generated from the spec on every load rather than maintained beside it, so it cannot describe an endpoint that isn't here.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The reference page.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/llms.txt": {
+      "get": {
+        "operationId": "llmsTxt",
+        "summary": "This contract, condensed, as markdown.",
+        "description": "The llms.txt convention (llmstxt.org): what this hub is and how to call it, written for an agent that was handed the host and nothing else. Unauthenticated, and a strict subset of this document — read the spec instead if you can parse it.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Markdown, served as text/plain so it renders wherever it is fetched.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "operationId": "index",
+        "summary": "Human-readable landing page.",
+        "description": "A short HTML page for a person who opened the base URL: what this is, one copy-pasteable request, and the response contract. Also served at `/index.html`. It documents the API and never the deployment behind it, so it names no channel, caller or ops endpoint.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The landing page.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

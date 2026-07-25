@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- A private hub for one operator's machines: being findable in a search index
+     gains nothing and costs a little attack surface. Agents that should read
+     this are pointed here deliberately, and /llms.txt is what they read. -->
+<meta name="robots" content="noindex, nofollow">
+<title>hubbub</title>
+<style>
+{{template "theme"}}
+  body {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 3.5rem 1.25rem 4rem;
+  }
+  h1 {
+    margin: 0;
+    font-size: 2rem;
+    letter-spacing: -0.02em;
+  }
+  h2 {
+    margin: 2.75rem 0 0.75rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--rule);
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  p { margin: 0 0 1rem; }
+  .tagline { margin: 0.4rem 0 0; font-size: 1.1rem; }
+  .version {
+    display: inline-block;
+    margin-top: 0.9rem;
+    padding: 0.1rem 0.5rem;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    font: 0.75rem/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--muted);
+  }
+  .note {
+    margin: 2rem 0 0;
+    padding: 0.9rem 1.1rem;
+    border-left: 3px solid var(--accent);
+    background: var(--code-bg);
+    border-radius: 0 4px 4px 0;
+  }
+  pre { margin: 0 0 1rem; }
+  .scroll { overflow-x: auto; margin: 0 0 1rem; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9375rem; }
+  th, td { text-align: left; padding: 0.4rem 0.9rem 0.4rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 0.8125rem; }
+  td:first-child { white-space: nowrap; }
+  ul { margin: 0 0 1rem; padding-left: 1.1rem; }
+  li { margin-bottom: 0.4rem; }
+  footer {
+    margin-top: 3rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--rule);
+    font-size: 0.875rem;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>hubbub</h1>
+  <p class="tagline">One authenticated endpoint in — notifications out to the operator's channels.</p>
+  <p class="version">v{{.Version}}</p>
+</header>
+
+<p class="note">
+  This is a private instance, not a public service. There is no signup: callers
+  are machines, each issued a key by the operator. Without one you get a
+  <code>401</code> and nothing else.
+</p>
+
+<h2>Sending</h2>
+
+<pre><code>curl -X POST {{.BaseURL}}/v1/notify \
+  -H 'Authorization: Bearer &lt;your-key&gt;' \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Backup failed","message":"nightly borg run exited 1","priority":"high"}'</code></pre>
+
+<p>
+  <code>title</code> and <code>message</code> are required. <code>priority</code>
+  (<code>low</code>, <code>default</code>, <code>high</code>,
+  <code>urgent</code>), <code>tags</code> and <code>channels</code> are
+  optional. Omit <code>channels</code> and the notification goes everywhere your
+  key permits; naming one it doesn't is a <code>403</code>, never a silent
+  narrowing. Unknown fields are rejected rather than dropped, so a caller with a
+  stale schema finds out.
+</p>
+
+<h2>What comes back</h2>
+
+<p>Callers here are scripts, so every outcome is explicit. Branch on the status
+code; <code>result</code> repeats it in the body.</p>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>Status</th><th><code>result</code></th><th></th></tr></thead>
+  <tbody>
+    <tr><td><code>200</code></td><td><code>delivered</code></td><td>Every selected channel delivered inside the response window</td></tr>
+    <tr><td><code>202</code></td><td><code>queued</code></td><td>Accepted and durably spooled; nothing delivered yet</td></tr>
+    <tr><td><code>207</code></td><td><code>partial</code></td><td>Mixed — the per-channel map says which was which</td></tr>
+    <tr><td><code>400</code></td><td>—</td><td>Malformed, or a field the API doesn't know</td></tr>
+    <tr><td><code>401</code></td><td>—</td><td>Missing or unknown key</td></tr>
+    <tr><td><code>403</code></td><td>—</td><td>Channel not permitted for this key</td></tr>
+    <tr><td><code>429</code></td><td><code>rate_capped</code></td><td>Global cap hit; honour <code>Retry-After</code></td></tr>
+    <tr><td><code>502</code></td><td><code>failed</code></td><td>Every selected channel failed permanently</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  A <code>202</code> is a promise, not a receipt: the message is on disk and its
+  real outcome is written to the operator's delivery log later, keyed by the
+  <code>requestId</code> the call returned. A channel being down means late
+  delivery, not a lost alert. Delivery is at-least-once, so a caller that times
+  out and retries may double-send.
+</p>
+
+<h2>The rest</h2>
+
+<ul>
+  <li><a href="/docs"><code>GET /docs</code></a> — the same contract as browsable reference, with a panel for firing a real request</li>
+  <li><a href="/openapi.json"><code>GET /openapi.json</code></a> — the full machine-readable contract, generated for this deployment</li>
+  <li><a href="/llms.txt"><code>GET /llms.txt</code></a> — the same, condensed, for agents</li>
+  <li><a href="/health"><code>GET /health</code></a> — liveness</li>
+</ul>
+
+<footer>
+  <p>
+    hubbub is open source:
+    <a href="https://github.com/ryanlewis/hubbub">github.com/ryanlewis/hubbub</a>.
+    This page documents the API, not the deployment behind it.
+  </p>
+</footer>
+
+</body>
+</html>

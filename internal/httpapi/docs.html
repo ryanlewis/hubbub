@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{{.Title}} API reference</title>
+<style nonce="{{.Nonce}}">
+{{template "theme"}}
+  :root {
+    /* The page shell. Left unbounded, the flex layout pins everything to the
+       left edge and a wide monitor gets two thirds of a screen of nothing. */
+    --shell: 84rem;
+    /* Prose is capped far tighter than the shell: tables want every pixel,
+       sentences want ~75 characters. One width cannot serve both. */
+    --measure: 46rem;
+  }
+  body { margin: 0; }
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    border-bottom: 1px solid var(--rule);
+    background: var(--bg);
+  }
+  header .bar {
+    max-width: var(--shell);
+    margin: 0 auto;
+    padding: 0.9rem 2rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.25rem;
+    align-items: baseline;
+  }
+  header h1 { margin: 0; font-size: 1.15rem; letter-spacing: -0.01em; }
+  header .base { color: var(--muted); font-size: 0.8125rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  header .key { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
+  header .key label { font-size: 0.8125rem; color: var(--muted); }
+  input[type=password], textarea {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.8125rem;
+    color: var(--fg);
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    padding: 0.35rem 0.5rem;
+  }
+  input[type=password] { width: 18rem; }
+  textarea { width: 100%; max-width: 58rem; min-height: 7.5rem; resize: vertical; line-height: 1.6; }
+  .layout {
+    display: flex;
+    align-items: flex-start;
+    max-width: var(--shell);
+    margin: 0 auto;
+  }
+  nav {
+    position: sticky;
+    top: 3.6rem;
+    flex: 0 0 14rem;
+    padding: 1.75rem 0 3rem 2rem;
+    font-size: 0.875rem;
+  }
+  nav p { margin: 0 0 0.6rem; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  nav a { display: block; padding: 0.2rem 0; text-decoration: none; color: var(--fg); }
+  nav a:hover { color: var(--accent); }
+  nav a code { background: none; padding: 0; }
+  main { flex: 1 1 auto; min-width: 0; padding: 1.75rem 2rem 6rem; }
+  .lede { color: var(--muted); }
+  .lede p { margin: 0 0 0.9rem; max-width: var(--measure); }
+  .summary, section.endpoint > p { max-width: var(--measure); }
+  .verb {
+    display: inline-block;
+    min-width: 3.4rem;
+    text-align: center;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font: 600 0.6875rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: 0.05em;
+    color: var(--panel);
+    background: var(--muted);
+  }
+  .verb-post { background: var(--ok); }
+  .verb-get { background: var(--accent); }
+  section.endpoint {
+    margin-top: 2rem;
+    padding-top: 1.75rem;
+    border-top: 1px solid var(--rule);
+    scroll-margin-top: 4.5rem;
+  }
+  section.endpoint h2 { margin: 0 0 0.35rem; font-size: 1.0625rem; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+  section.endpoint h2 .path { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .auth { font-size: 0.75rem; color: var(--muted); border: 1px solid var(--rule); border-radius: 999px; padding: 0.05rem 0.5rem; }
+  .summary { margin: 0 0 0.75rem; }
+  h3 { margin: 1.5rem 0 0.5rem; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; max-width: 76rem; font-size: 0.9375rem; }
+  th, td { text-align: left; padding: 0.45rem 1.25rem 0.45rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: 0.75rem; color: var(--muted); font-weight: 600; }
+  td.name { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8125rem; white-space: nowrap; }
+  td.type { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8125rem; white-space: nowrap; }
+  /* Explicit widths: auto layout starves this column and stacks an enum one
+     word per line, which reads as noise rather than a list of values. */
+  th:nth-child(1), th:nth-child(2) { width: 1%; }
+  th:nth-child(3) { width: 15rem; }
+  td.rules { font-size: 0.8125rem; color: var(--muted); }
+  .req { color: var(--err); }
+  .status-list { list-style: none; margin: 0; padding: 0; }
+  .status-list { max-width: 68rem; }
+  .status-list li { padding: 0.5rem 0; border-bottom: 1px solid var(--rule); display: flex; gap: 0.75rem; align-items: baseline; }
+  .status-list .code { font: 600 0.875rem/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; min-width: 2.5rem; }
+  .s2 { color: var(--ok); }
+  .s4 { color: var(--warn); }
+  .s5 { color: var(--err); }
+  details { margin: 0.4rem 0 0; }
+  details summary { cursor: pointer; font-size: 0.8125rem; color: var(--muted); }
+  details pre { margin: 0.5rem 0 0; }
+  form.try {
+    margin: 0.75rem 0 0;
+    max-width: 60rem;
+    padding: 1rem;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--panel);
+  }
+  form.try .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.6rem; }
+  button {
+    font: inherit;
+    font-size: 0.8125rem;
+    padding: 0.3rem 0.85rem;
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    background: var(--code-bg);
+    color: var(--fg);
+    cursor: pointer;
+  }
+  button.send { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  button:hover { border-color: var(--accent); }
+  .danger {
+    margin: 0 0 0.75rem;
+    max-width: var(--measure);
+    padding: 0.55rem 0.75rem;
+    border-left: 3px solid var(--err);
+    background: var(--code-bg);
+    border-radius: 0 4px 4px 0;
+    font-size: 0.8125rem;
+  }
+  .out { margin-top: 0.75rem; }
+  .out .line { font: 600 0.875rem/1.8 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .out pre { margin: 0.4rem 0 0; max-height: 22rem; }
+  footer { border-top: 1px solid var(--rule); font-size: 0.8125rem; color: var(--muted); }
+  footer p { max-width: var(--shell); margin: 0 auto; padding: 1.5rem 2rem; }
+  @media (max-width: 55rem) {
+    nav { display: none; }
+    main { padding: 1.5rem 1.25rem 4rem; }
+    header .bar { padding: 0.9rem 1.25rem; }
+    footer p { padding: 1.5rem 1.25rem; }
+    header .key { margin-left: 0; width: 100%; }
+    input[type=password] { flex: 1 1 auto; width: auto; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <h1>{{.Title}} <span class="base">v{{.Version}}</span></h1>
+    <span class="base">{{.BaseURL}}</span>
+    <span class="key">
+      <label for="apikey">Bearer key</label>
+      <input type="password" id="apikey" autocomplete="off" spellcheck="false" placeholder="kept in this tab only">
+    </span>
+  </div>
+</header>
+
+<div class="layout">
+
+<nav>
+  <p>Endpoints</p>
+  {{range .Endpoints}}
+    <a href="#{{.ID}}"><span class="verb verb-{{.MethodClass}}">{{.Method}}</span> <code>{{.Path}}</code></a>
+  {{end}}
+</nav>
+
+<main>
+
+<div class="lede">
+  {{range .Description}}<p>{{.}}</p>{{end}}
+</div>
+
+{{range .Endpoints}}
+<section class="endpoint" id="{{.ID}}">
+  <h2>
+    <span class="verb verb-{{.MethodClass}}">{{.Method}}</span>
+    <span class="path">{{.Path}}</span>
+    {{if .Secured}}<span class="auth">bearer key required</span>{{else}}<span class="auth">no auth</span>{{end}}
+  </h2>
+  <p class="summary">{{.Summary}}</p>
+  {{if .Description}}<p>{{.Description}}</p>{{end}}
+
+  {{if .RequestFields}}
+  <h3>Request body</h3>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Rules</th><th></th></tr></thead>
+    <tbody>
+      {{range .RequestFields}}
+      <tr>
+        <td class="name">{{.Name}}{{if .Required}}<span class="req">*</span>{{end}}</td>
+        <td class="type">{{.Type}}</td>
+        <td class="rules">{{.Rules}}</td>
+        <td>{{.Description}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{end}}
+
+  {{if .CanTry}}
+  <h3>Try it</h3>
+  <form class="try" data-method="{{.Method}}" data-path="{{.Path}}" data-secured="{{if .Secured}}1{{else}}0{{end}}">
+    {{if .Warn}}<p class="danger">{{.Warn}}</p>{{end}}
+    {{if .Examples}}
+    <div class="row">
+      {{range .Examples}}<button type="button" class="ex" data-body="{{.Body}}" title="{{.Summary}}">{{.Name}}</button>{{end}}
+    </div>
+    {{end}}
+    {{if .Body}}<textarea spellcheck="false" aria-label="Request body">{{.Body}}</textarea>{{end}}
+    <div class="row" style="margin-top:0.6rem;margin-bottom:0">
+      <button type="submit" class="send">Send</button>
+    </div>
+    <div class="out" hidden>
+      <div class="line"></div>
+      <pre><code></code></pre>
+    </div>
+  </form>
+  {{end}}
+
+  <h3>Responses</h3>
+  <ul class="status-list">
+    {{range .Responses}}
+    <li>
+      <span class="code s{{.Class}}">{{.Code}}</span>
+      <span>
+        {{.Description}}
+        {{if .Example}}<details><summary>example body</summary><pre><code>{{.Example}}</code></pre></details>{{end}}
+      </span>
+    </li>
+    {{end}}
+  </ul>
+
+  {{if .ResponseFields}}
+  <h3>Response body</h3>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Rules</th><th></th></tr></thead>
+    <tbody>
+      {{range .ResponseFields}}
+      <tr>
+        <td class="name">{{.Name}}{{if .Required}}<span class="req">*</span>{{end}}</td>
+        <td class="type">{{.Type}}</td>
+        <td class="rules">{{.Rules}}</td>
+        <td>{{.Description}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{end}}
+</section>
+{{end}}
+
+</main>
+</div>
+
+<footer>
+  Rendered from <a href="/openapi.json">/openapi.json</a> — this page cannot
+  describe an endpoint the spec doesn't. Source:
+  <a href="https://github.com/ryanlewis/hubbub">github.com/ryanlewis/hubbub</a>.
+</footer>
+
+<script nonce="{{.Nonce}}">
+(function () {
+  "use strict";
+  var keyEl = document.getElementById("apikey");
+
+  function show(out, cls, line, body) {
+    out.hidden = false;
+    var l = out.querySelector(".line");
+    l.className = "line " + cls;
+    l.textContent = line;
+    out.querySelector("code").textContent = body;
+  }
+
+  document.querySelectorAll("form.try").forEach(function (form) {
+    var method = form.dataset.method;
+    var path = form.dataset.path;
+    var secured = form.dataset.secured === "1";
+    var bodyEl = form.querySelector("textarea");
+    var out = form.querySelector(".out");
+
+    form.querySelectorAll("button.ex").forEach(function (b) {
+      b.addEventListener("click", function () {
+        if (bodyEl) bodyEl.value = b.dataset.body;
+      });
+    });
+
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var headers = {};
+      if (secured) {
+        var key = keyEl.value.trim();
+        if (!key) {
+          show(out, "s4", "no key", "This endpoint needs a bearer key. Put one in the field at the top of the page.");
+          keyEl.focus();
+          return;
+        }
+        headers["Authorization"] = "Bearer " + key;
+      }
+      if (bodyEl) headers["Content-Type"] = "application/json";
+
+      show(out, "", "sending…", "");
+      // Same-origin and relative on purpose: the request goes to the hub that
+      // served this page, never to whatever host the spec happens to name.
+      fetch(path, { method: method, headers: headers, body: bodyEl ? bodyEl.value : undefined })
+        .then(function (res) {
+          return res.text().then(function (text) {
+            var pretty = text;
+            try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch (e) { /* not JSON */ }
+            if (pretty.length > 4000) pretty = pretty.slice(0, 4000) + "\n… truncated";
+            var line = res.status + " " + res.statusText;
+            var retry = res.headers.get("Retry-After");
+            if (retry) line += "  ·  Retry-After: " + retry + "s";
+            show(out, "s" + String(res.status).charAt(0), line, pretty);
+          });
+        })
+        .catch(function (err) {
+          show(out, "s5", "request failed", String(err));
+        });
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

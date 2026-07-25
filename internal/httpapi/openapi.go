@@ -20,6 +20,21 @@ var openapiSpec []byte
 // author's — the whole point of serving a spec is that an agent pointed at the
 // base URL gets the truth about *this* hub.
 func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
+	doc, err := s.resolvedSpec(r)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "spec unavailable")
+		return
+	}
+	writeJSON(w, http.StatusOK, doc)
+}
+
+// resolvedSpec is the embedded document with this deployment's parts filled in.
+//
+// It is a function rather than handler-local because the docs page renders from
+// it too. One resolver means the browsable reference and the machine-readable
+// spec cannot disagree about what this hub offers — the page is a view of the
+// spec, not a second description of the API sitting beside it.
+func (s *Server) resolvedSpec(r *http.Request) (map[string]any, error) {
 	// Unmarshalling per request is what makes the injection below safe: each
 	// call gets its own tree, so mutating it cannot race a concurrent request
 	// or leave one caller's reconstructed base URL cached for the next.
@@ -27,8 +42,7 @@ func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(openapiSpec, &doc); err != nil {
 		// Embedded at build time and parsed by TestOpenAPISpecIsValidJSON, so
 		// this needs a corrupt binary to reach.
-		writeError(w, http.StatusInternalServerError, "spec unavailable")
-		return
+		return nil, err
 	}
 
 	if info, ok := doc["info"].(map[string]any); ok {
@@ -36,8 +50,7 @@ func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	doc["servers"] = []any{map[string]any{"url": baseURL(r)}}
 	injectChannelEnum(doc, s.Store.Channels().IDs())
-
-	writeJSON(w, http.StatusOK, doc)
+	return doc, nil
 }
 
 // injectChannelEnum lists the channel ids this deployment actually has on the

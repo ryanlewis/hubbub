@@ -48,6 +48,20 @@ func (s *Server) PublicMux() *http.ServeMux {
 	// agent can be pointed at the base URL and discover the contract before it
 	// has been issued a key.
 	mux.HandleFunc("GET /openapi.json", s.handleOpenAPI)
+	// Same reasoning, for the two audiences that arrive without a key: a person
+	// who opened the base URL in a browser, and an agent that was handed the
+	// host and nothing else.
+	//
+	// Registered on the exact root — "/{$}" — never a bare "/", which is a
+	// subtree pattern: that would answer every unrouted path with the landing
+	// page, turning a caller's typo'd URL into 200 OK full of HTML instead of
+	// the 404 it needs to see.
+	mux.HandleFunc("GET /{$}", handleIndex)
+	mux.HandleFunc("GET /index.html", handleIndex)
+	mux.HandleFunc("GET /llms.txt", handleLLMsTxt)
+	// The browsable reference. Rendered from the same resolved spec, so it can
+	// only ever show what /openapi.json already says.
+	mux.HandleFunc("GET /docs", s.handleDocs)
 	return mux
 }
 
