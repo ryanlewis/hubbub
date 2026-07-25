@@ -76,6 +76,14 @@ enqueueing, then waits out `response_window` and reports whatever is known:
 finished attempts concretely, anything still in flight as `queued`. `statusFor`
 maps the per-channel map onto 200/202/207/502.
 
+`openapi.json` is embedded and hand-written, but the channel enum, server URL
+and version are injected per request (`openapi.go`) — all three are properties
+of the deployment, so a checked-in value would be wrong everywhere but here.
+`openapi_test.go` is a drift check, not documentation: it replays the spec's
+examples through the real mux and pins the documented fields, priority enum and
+status codes to the code. Change the request shape and the suite fails until the
+spec follows.
+
 ### Outbox (`internal/outbox`)
 
 - `Engine` holds `workers` (running) and `wanted` (every configured channel,

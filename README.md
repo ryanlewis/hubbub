@@ -32,9 +32,9 @@ database, no runtime to install, no build chain.
 ## Status
 
 Early. The core vertical works end to end — authenticated notify, the outbox,
-the ntfy adapter, the full response contract, metrics, the dead-man heartbeat —
-and is covered by tests. Not yet built: the `exec`, email and Discord adapters,
-the served OpenAPI spec, bare-URL webhooks, and the admin UI. See
+the ntfy adapter, the full response contract, metrics, the dead-man heartbeat,
+the served OpenAPI spec — and is covered by tests. Not yet built: the `exec`,
+email and Discord adapters, bare-URL webhooks, and the admin UI. See
 [Roadmap](#roadmap).
 
 Expect breaking changes to config shapes before a tagged release.
@@ -89,6 +89,12 @@ Fire a test send through one channel end to end, from the ops port:
 
 ```sh
 curl -s -X POST localhost:2112/test/ntfy
+```
+
+The API describes itself, including the channel ids this instance has:
+
+```sh
+curl -s localhost:8080/openapi.json
 ```
 
 ## Configuration
@@ -265,6 +271,27 @@ request that cannot succeed until `channels.toml` is edited.
 A `202` is settled later in the delivery log, not over HTTP — a queued message
 that eventually expires shows up there and in `/metrics`.
 
+### `GET /openapi.json`
+
+The served OpenAPI 3.1 spec, on the public port and deliberately **unauthenticated**:
+it describes the shape of the API, which is not a secret, so an agent can be
+pointed at the base URL and discover the contract before it holds a key.
+
+Three parts are filled in per request rather than checked into the file, because
+each is a property of the deployment rather than of the API:
+
+| Injected | Why it can't be hardcoded |
+|---|---|
+| `channels` enum | Channel ids are whatever the operator configured. Includes disabled ones — naming one is a `disabled` result, not an error |
+| `servers[0].url` | Reconstructed from `X-Forwarded-Proto`/`-Host`, so a TLS-terminating proxy in front doesn't produce an `http://` base for an HTTPS-only hub |
+| `info.version` | Belongs to the binary, so a deployment can be identified from outside |
+
+The spec is only worth serving if it's true, so it is asserted against the real
+handler rather than reviewed by eye: `openapi_test.go` replays every example
+request through the live mux, and pins the documented field set, priority enum
+and status codes to what the code actually does. Adding a request field without
+documenting it fails the suite.
+
 ### Ops endpoints
 
 Served on the ops port, which is intended to sit somewhere the internet can't
@@ -375,7 +402,7 @@ Two rules the codebase holds to:
 - [x] Outbox delivery engine — spool, serial workers, wait-window responses
 - [x] JSONL delivery log, `/health`, `/metrics` + ops port, test-send CTA
 - [x] Self-probing dead-man's-switch heartbeat
-- [ ] `GET /openapi.json` — served spec so an agent can be pointed at the base URL
+- [x] `GET /openapi.json` — served spec so an agent can be pointed at the base URL
 - [ ] `exec` adapter — shell-out channels, no rebuild required
 - [ ] Email and Discord adapters
 - [ ] Per-key rate caps and idempotency keys

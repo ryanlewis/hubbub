@@ -44,6 +44,10 @@ func (s *Server) PublicMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/notify", s.handleNotify)
 	mux.HandleFunc("GET /health", s.handleHealth)
+	// Unauthenticated on purpose: the spec exposes shape, not secrets, so an
+	// agent can be pointed at the base URL and discover the contract before it
+	// has been issued a key.
+	mux.HandleFunc("GET /openapi.json", s.handleOpenAPI)
 	return mux
 }
 

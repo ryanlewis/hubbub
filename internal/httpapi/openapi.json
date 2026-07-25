@@ -1,0 +1,322 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "hubbub",
+    "version": "0.0.0-injected-at-serve-time",
+    "summary": "Authenticated notification fan-out hub.",
+    "description": "One JSON API in, delivery to the operator's channels out.\n\nCallers are machines, so every outcome is explicit enough to branch on: the HTTP status carries the verdict and `result` repeats it in the body. A `202` is a promise, not a receipt — the message is durably queued and its outcome is written to the hub's delivery log later, keyed by the `requestId` this call returned.\n\nAuthentication is a bearer key. The key's channel permission list *is* its delivery set: omit `channels` and the notification goes to every channel the key permits. Supplying `channels` narrows that set and can never widen it — naming a channel the key lacks is a `403`, not a silent intersection.\n\nDelivery is at-least-once: a caller that times out and retries may double-send."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Replaced at serve time with this deployment's base URL."
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/v1/notify": {
+      "post": {
+        "operationId": "notify",
+        "summary": "Send a notification to the caller's channels.",
+        "description": "Enqueues the notification for every target channel, waits out the server's response window, and reports what is known by then: attempts that finished are reported concretely, anything still in flight as `queued`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotifyRequest"
+              },
+              "examples": {
+                "minimal": {
+                  "summary": "Title and message only — goes to every channel the key permits",
+                  "value": {
+                    "title": "Backup failed",
+                    "message": "nightly rsync exited 1"
+                  }
+                },
+                "withPriorityAndTags": {
+                  "summary": "Priority and tags are display hints; neither changes routing",
+                  "value": {
+                    "title": "Disk almost full",
+                    "message": "/ is at 94% on tools",
+                    "priority": "urgent",
+                    "tags": ["disk", "cron"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Delivered: every target channel completed successfully inside the response window.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotifyResponse"
+                },
+                "example": {
+                  "result": "delivered",
+                  "requestId": "r_cc519c9a3ee79f270c4e9823cd56f2f3",
+                  "channels": {
+                    "ntfy": "ok"
+                  }
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Queued: nothing finished inside the response window. The message is durably spooled and will be retried; the outcome lands in the delivery log under this `requestId`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotifyResponse"
+                },
+                "example": {
+                  "result": "queued",
+                  "requestId": "r_cc519c9a3ee79f270c4e9823cd56f2f3",
+                  "channels": {
+                    "ntfy": "queued"
+                  }
+                }
+              }
+            }
+          },
+          "207": {
+            "description": "Partial: channels disagreed — some combination of delivered, queued, failed or disabled. Inspect `channels` per id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotifyResponse"
+                },
+                "example": {
+                  "result": "partial",
+                  "requestId": "r_cc519c9a3ee79f270c4e9823cd56f2f3",
+                  "channels": {
+                    "ntfy": "ok",
+                    "parked": "disabled"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request: bad JSON, an unknown field, an unparseable priority, an over-length body, or `\"channels\": []` (omit the field instead — an empty list is a caller that computed no targets, and must not fan out to everything).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or unknown bearer key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The request named a channel this key is not permitted to use. A channel the key *is* permitted but which is currently disabled is not a 403 — it comes back as a per-channel `disabled` result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Global rate cap reached. Not a 202: a cap has to look like an error so standard retry machinery honours it rather than reading it as success.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the cap window rolls over.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "const": "rate_capped"
+                    }
+                  },
+                  "required": ["result"]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Every target channel failed permanently.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotifyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "summary": "Liveness.",
+        "description": "200 if the process is serving. Liveness only — no outbound probes and no channel state, so a healthy response says nothing about whether deliveries are succeeding.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The process is up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                },
+                "example": {
+                  "status": "ok",
+                  "version": "0.1.0",
+                  "uptime": "3h14m0s"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "openapi",
+        "summary": "This document.",
+        "description": "Unauthenticated by design: it exposes the API's shape, which is not a secret, so an agent can be pointed at the base URL and discover the contract before it holds a key. The `channels` enum and the server URL reflect this deployment.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The OpenAPI document.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "A key issued by the operator, sent as `Authorization: Bearer <key>`."
+      }
+    },
+    "schemas": {
+      "NotifyRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "message"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "description": "Required. Max 256 bytes after sanitisation. All control characters are stripped — titles can land in HTTP headers and email subjects."
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "description": "Required. Max 4096 bytes after sanitisation. Newlines and tabs survive (multi-line log excerpts are content); other control characters are stripped. Adapters truncate further to fit the channel."
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["low", "default", "high", "urgent"],
+            "default": "default",
+            "description": "Display only — never changes which channels fire. Omitted or empty means `default`; parsing is case-insensitive."
+          },
+          "tags": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "Short labels passed to adapters. Control characters are stripped and tags left empty are dropped."
+          },
+          "channels": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional subset of the key's permitted channels. Omit it to use the key's full set. An explicit empty array is rejected with 400 rather than treated as absent. The enum on `items` lists the channel ids this deployment has configured; a key still only reaches the ones it is permitted."
+          }
+        }
+      },
+      "NotifyResponse": {
+        "type": "object",
+        "required": ["result", "requestId", "channels"],
+        "properties": {
+          "result": {
+            "type": "string",
+            "enum": ["delivered", "queued", "partial", "failed"],
+            "description": "The verdict, repeating what the status code already said. Branch on the status code first and this second — never infer either from the channel map."
+          },
+          "requestId": {
+            "type": "string",
+            "description": "Correlation id, also written to the hub's delivery log. Quote it when reporting a problem, and use it to find the settled outcome of anything reported as `queued`."
+          },
+          "channels": {
+            "type": "object",
+            "description": "Per-channel outcome, keyed by channel id.",
+            "additionalProperties": {
+              "type": "string",
+              "description": "`ok`, `queued`, `disabled`, or a `failed: …` / `dropped: …` reason."
+            }
+          }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "required": ["status", "version", "uptime"],
+        "properties": {
+          "status": {
+            "const": "ok"
+          },
+          "version": {
+            "type": "string"
+          },
+          "uptime": {
+            "type": "string",
+            "description": "Go duration string, e.g. \"3h14m0s\"."
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Human-readable reason. Intended for a log line or an operator, not for programmatic branching — branch on the status code."
+          }
+        }
+      }
+    }
+  }
+}
