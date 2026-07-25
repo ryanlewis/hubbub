@@ -46,6 +46,15 @@
                     "priority": "urgent",
                     "tags": ["disk", "cron"]
                   }
+                },
+                "richEmail": {
+                  "summary": "html adds a rich body for channels that render one; message stays the plain-text alternative",
+                  "value": {
+                    "title": "Weekly digest",
+                    "message": "3 jobs failed, 41 succeeded. See the run log.",
+                    "html": "<p>3 jobs failed, 41 succeeded.</p><table><tr><th>job</th><th>exit</th></tr><tr><td>borg</td><td>1</td></tr></table>",
+                    "tags": ["digest"]
+                  }
                 }
               }
             }
@@ -301,7 +310,12 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 4096,
-            "description": "Required. Max 4096 bytes after sanitisation. Newlines and tabs survive (multi-line log excerpts are content); other control characters are stripped. Adapters truncate further to fit the channel."
+            "description": "Required. Max 4096 bytes after sanitisation. Newlines and tabs survive (multi-line log excerpts are content); other control characters are stripped. Adapters truncate further to fit the channel. Required even alongside `html` — it is the plain-text alternative, and the only thing a text-only channel can show."
+          },
+          "html": {
+            "type": "string",
+            "maxLength": 131072,
+            "description": "Optional rich body for channels that can render one — email today, and ignored by every text-only channel. Send a fragment (`<p>done</p>`) to get it wrapped in hubbub's styled mail shell, or a whole document (starting `<!doctype` or `<html`) to own the markup completely. Passed through as written: control characters are stripped and nothing else is, so treat the ability to post here as the ability to put arbitrary markup in the operator's inbox."
           },
           "priority": {
             "type": "string",

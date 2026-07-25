@@ -39,16 +39,28 @@ func ParsePriority(s string) (Priority, error) {
 }
 
 // Ingest caps. Generous by design: adapters truncate fit-to-channel.
+//
+// MaxHTMLLen is two orders of magnitude above MaxMessageLen because the two
+// fields are not the same kind of thing: a message is prose a phone has to
+// show, an HTML body is a document, and a modest one with inline CSS clears
+// 4 KB before it says anything. It is still a cap — the spool holds one file
+// per pending message, so an uncapped body would size the disk.
 const (
 	MaxTitleLen   = 256
 	MaxMessageLen = 4096
+	MaxHTMLLen    = 128 << 10
 	MaxTags       = 16
 	MaxTagLen     = 64
 )
 
 type Notification struct {
-	Title     string    `json:"title"`
-	Message   string    `json:"message"`
+	Title   string `json:"title"`
+	Message string `json:"message"`
+	// HTML is the caller's own rich body, used by adapters whose channel can
+	// render it (email). Optional: adapters that get nothing here compose
+	// their own presentation from the fields above, and channels that can only
+	// carry text — ntfy, exec — ignore it entirely and keep using Message.
+	HTML      string    `json:"html,omitempty"`
 	Priority  Priority  `json:"priority"`
 	Tags      []string  `json:"tags,omitempty"`
 	CallerID  string    `json:"callerId"`
@@ -65,6 +77,24 @@ func SanitizeTitle(s string) string {
 // SanitizeMessage keeps \n and \t (multi-line log excerpts are content);
 // everything else control-ish is stripped.
 func SanitizeMessage(s string) string {
+	return stripControl(s, true)
+}
+
+// SanitizeHTMLBody strips control characters from a caller's HTML body and
+// does nothing else.
+//
+// It is deliberately **not** a tag sanitiser, and the name says so to stop a
+// later reader assuming it is one. Markup here is passed through as written:
+// posting requires a key the operator issued to a machine the operator runs,
+// which is the same trust that already lets a caller put arbitrary text in
+// front of the operator — and the receiving mail client is itself a sanitiser
+// that drops scripts and blocks remote images. Doing this properly (parsing
+// to an allowlist) needs an HTML parser, which the stdlib does not have and
+// which is not worth a dependency for content we already trust.
+//
+// Newlines and tabs survive, as in a message body; the escapes and stray C0
+// bytes that would otherwise ride into the SMTP DATA stream do not.
+func SanitizeHTMLBody(s string) string {
 	return stripControl(s, true)
 }
 
@@ -118,6 +148,13 @@ func (n *Notification) Validate() error {
 	}
 	if len(n.Message) > MaxMessageLen {
 		return fmt.Errorf("message exceeds %d bytes", MaxMessageLen)
+	}
+	// No emptiness check: html is optional, and an adapter with nothing here
+	// composes its own body. message stays required either way — it is the
+	// text alternative every rich mail still needs, and the only thing a
+	// text-only channel has to work with.
+	if len(n.HTML) > MaxHTMLLen {
+		return fmt.Errorf("html exceeds %d bytes", MaxHTMLLen)
 	}
 	if len(n.Tags) > MaxTags {
 		return fmt.Errorf("more than %d tags", MaxTags)

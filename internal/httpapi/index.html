@@ -90,11 +90,31 @@
 <p>
   <code>title</code> and <code>message</code> are required. <code>priority</code>
   (<code>low</code>, <code>default</code>, <code>high</code>,
-  <code>urgent</code>), <code>tags</code> and <code>channels</code> are
-  optional. Omit <code>channels</code> and the notification goes everywhere your
-  key permits; naming one it doesn't is a <code>403</code>, never a silent
-  narrowing. Unknown fields are rejected rather than dropped, so a caller with a
-  stale schema finds out.
+  <code>urgent</code>), <code>tags</code>, <code>html</code> and
+  <code>channels</code> are optional. Omit <code>channels</code> and the
+  notification goes everywhere your key permits; naming one it doesn't is a
+  <code>403</code>, never a silent narrowing. Unknown fields are rejected rather
+  than dropped, so a caller with a stale schema finds out.
+</p>
+
+<h2>Rich bodies</h2>
+
+<p>
+  Add <code>html</code> and channels that can render it will — email does;
+  push channels ignore it and show <code>message</code>, which is why
+  <code>message</code> stays required as the plain-text alternative.
+</p>
+
+<pre><code>-d '{"title":"Weekly digest",
+     "message":"3 jobs failed, 41 succeeded",
+     "html":"&lt;p&gt;3 failed, &lt;b&gt;41&lt;/b&gt; succeeded&lt;/p&gt;"}'</code></pre>
+
+<p>
+  Send a fragment and it arrives wrapped in a styled mail; send a whole
+  document — anything starting <code>&lt;!doctype</code> or
+  <code>&lt;html</code> — and it is used exactly as written, so a producer that
+  wants to own the markup can. It is passed through unaltered, which is
+  deliberate: posting at all requires a key the operator issued.
 </p>
 
 <h2>What comes back</h2>

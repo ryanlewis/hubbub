@@ -21,6 +21,7 @@ type Record struct {
 	Channels  map[string]string `json:"channels,omitempty"`
 	Title     string            `json:"title,omitempty"`
 	MsgBytes  int               `json:"msgBytes,omitempty"`
+	HTMLBytes int               `json:"htmlBytes,omitempty"`
 	Priority  string            `json:"priority,omitempty"`
 	Channel   string            `json:"channel,omitempty"` // terminal lines
 	Outcome   string            `json:"outcome,omitempty"` // terminal lines

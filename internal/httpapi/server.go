@@ -20,7 +20,12 @@ import (
 )
 
 const (
-	maxBodyBytes = 64 << 10 // reject before buffering
+	// maxBodyBytes rejects before buffering. It has to clear notify.MaxHTMLLen
+	// with room for JSON escaping, or the field-level cap would be unreachable
+	// and an over-length html body would surface as "unexpected EOF" instead of
+	// the error naming the field. Only reached by an authenticated caller that
+	// is under the rate cap — both run first.
+	maxBodyBytes = 2 * notify.MaxHTMLLen
 	// maxClaimedIPBytes bounds the untrusted X-Forwarded-For copied into the
 	// delivery log. The auth-failure line is written before the rate cap
 	// applies, so an unauthenticated caller would otherwise choose the size of
@@ -89,8 +94,11 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 type notifyRequest struct {
-	Title    string   `json:"title"`
-	Message  string   `json:"message"`
+	Title   string `json:"title"`
+	Message string `json:"message"`
+	// Optional rich body for channels that can render one. Passed through as
+	// written — see notify.SanitizeHTMLBody for why that is the trust model.
+	HTML     string   `json:"html"`
 	Priority string   `json:"priority"`
 	Tags     []string `json:"tags"`
 	// Pointer so an omitted list is distinguishable from an explicit empty
@@ -181,6 +189,7 @@ func (s *Server) handleNotify(w http.ResponseWriter, r *http.Request) {
 	n := notify.Notification{
 		Title:     notify.SanitizeTitle(req.Title),
 		Message:   notify.SanitizeMessage(req.Message),
+		HTML:      notify.SanitizeHTMLBody(req.HTML),
 		Priority:  prio,
 		Tags:      notify.SanitizeTags(req.Tags),
 		CallerID:  caller.ID,
@@ -207,6 +216,7 @@ func (s *Server) handleNotify(w http.ResponseWriter, r *http.Request) {
 		Channels:  results,
 		Title:     n.Title,
 		MsgBytes:  len(n.Message),
+		HTMLBytes: len(n.HTML),
 		Priority:  string(n.Priority),
 	})
 	writeJSON(w, status, notifyResponse{Result: result, RequestID: n.RequestID, Channels: results})

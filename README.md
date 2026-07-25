@@ -32,9 +32,9 @@ database, no runtime to install, no build chain.
 ## Status
 
 Early. The core vertical works end to end — authenticated notify, the outbox,
-the ntfy adapter, the full response contract, metrics, the dead-man heartbeat,
-the served OpenAPI spec — and is covered by tests. Not yet built: the `exec`,
-email and Discord adapters, bare-URL webhooks, and the admin UI. See
+the ntfy and smtp adapters, the full response contract, metrics, the dead-man
+heartbeat, the served OpenAPI spec — and is covered by tests. Not yet built: the
+`exec` and Discord adapters, bare-URL webhooks, and the admin UI. See
 [Roadmap](#roadmap).
 
 Expect breaking changes to config shapes before a tagged release.
@@ -46,7 +46,8 @@ flowchart LR
     A["Caller<br>cron / script / agent"] -->|"POST /v1/notify<br>Bearer key"| B[hubbub]
     B --> C{{outbox<br>one spool + worker per channel}}
     C --> D[ntfy]
-    C -.-> E["exec / email / Discord<br>(planned)"]
+    C --> E["smtp<br>email, HTML + text"]
+    C -.-> F["exec / Discord<br>(planned)"]
 ```
 
 A request is authenticated, rate-capped, validated, then enqueued into a
@@ -182,11 +183,50 @@ server = "https://ntfy.sh"
 topic = "unguessable-topic"
 token = "tk_..."
 
+[email]
+type = "smtp"
+host = "smtp.mail.me.com"
+port = 587
+username = "you@icloud.com"
+password = "app-specific-password"
+from = "you@icloud.com"
+from_name = "hubbub"
+to = ["you@icloud.com"]
+
 # Parked after the topic leaked. Credentials kept; re-enabling is one line.
 [standby]
 type = "ntfy"
 enabled = false
 ```
+
+#### Adapter types
+
+| `type` | Settings |
+|---|---|
+| `ntfy` | `server` (default `https://ntfy.sh`), `topic` (required), `token` |
+| `smtp` | `host` (required), `port`, `username`, `password`, `from` (required), `from_name`, `to` (required, a list), `tls`, `helo`, `rate_limit_cooldown` |
+
+`smtp` is generic submission — iCloud, Fastmail, Gmail or a relay on localhost
+are all just a `host`. It sends `multipart/alternative`: the caller's `html` (or
+a mail hubbub composes from the notification) alongside `message` as the plain
+part.
+
+`tls` is `starttls` (default), `implicit` or `none`, and defaults from the port —
+`465` means implicit, anything else means STARTTLS. A server that stops
+advertising STARTTLS is refused rather than downgraded, because the alternative
+is putting the password on the wire. `tls = "none"` with a `password` set fails
+the config load: Go's SMTP client won't transmit credentials over a bare
+connection anyway, so the channel would look configured and fail every send.
+
+`rate_limit_cooldown` (default `15m`) is how long to park the channel after a
+`4xx` that names a send limit. SMTP has no `Retry-After`, and the generic retry
+backoff tops out at five minutes — which against a provider's daily quota is
+just a busier way to keep being refused.
+
+For iCloud specifically: `password` must be an [app-specific
+password](https://support.apple.com/en-us/102654), `from` must be your iCloud
+address or a verified alias, and if auth fails with credentials you know are
+right, try `username` as the part before the `@`.
 
 The table name is the channel id that permissions and results refer to; `type`
 picks the adapter. Several instances of one type are fine. Because the id is a
@@ -225,13 +265,35 @@ Authenticate with `Authorization: Bearer <key>`.
 |---|---|---|
 | `title` | yes | Max 256 bytes. All control characters stripped at ingest |
 | `message` | yes | Max 4096 bytes. Keeps `\n` and `\t`; other control chars stripped |
+| `html` | no | Max 128 KB. Rich body for channels that render one; see below |
 | `priority` | no | `low` \| `default` \| `high` \| `urgent`, case-insensitive |
 | `tags` | no | Max 16, each max 64 bytes. Control characters stripped |
 | `channels` | no | Narrows delivery to a subset of what the key permits |
 
-**Priority is display-only.** It maps to the ntfy priority header and (later) an
-email subject prefix. It never changes which channels fire — otherwise a caller
-could escalate past its own permission list with `priority: urgent`.
+**Priority is display-only.** It maps to the ntfy priority header and to an
+email subject prefix (`[HIGH]`, `[URGENT]`) plus `Importance`. It never changes
+which channels fire — otherwise a caller could escalate past its own permission
+list with `priority: urgent`.
+
+**`html` lets the producer own the body.** Channels that can render it do
+(`smtp`); text-only channels ignore it entirely and show `message`, which is why
+`message` stays required — it is the `text/plain` alternative in the mail, and
+the only thing a push channel has to work with.
+
+A fragment is wrapped in hubbub's styled shell, so `"<p>done</p>"` arrives as a
+complete email. Anything starting `<!doctype` or `<html` is treated as a whole
+document and used verbatim — wrapping it would nest `<html>` inside a `<body>`
+and leave the result to each client's error recovery.
+
+It is passed through as written. Control characters are stripped; no tags,
+attributes or URLs are filtered. That is a deliberate trust decision: posting at
+all requires a key the operator issued to a machine the operator runs, which is
+the same trust that already lets a caller put arbitrary *text* in front of the
+operator, and the receiving mail client is itself a sanitiser that drops scripts
+and blocks remote images. Sanitising properly would mean parsing HTML, which the
+Go standard library cannot do — and a parser is not worth a dependency for
+content that is already trusted. **Treat "can post to this hub" as "can put
+arbitrary markup in the operator's inbox"** when deciding who gets a key.
 
 `channels` narrows, never widens, and is not silently intersected: naming a
 channel the key lacks is a `403`, so a caller always knows its send didn't do
@@ -466,8 +528,10 @@ Two rules the codebase holds to:
 - [x] Self-probing dead-man's-switch heartbeat
 - [x] `GET /openapi.json` — served spec so an agent can be pointed at the base
       URL, plus `/`, `/docs` and `/llms.txt` for readers who arrive without a key
+- [x] `smtp` adapter — email as `multipart/alternative`, with an optional
+      caller-supplied `html` body
 - [ ] `exec` adapter — shell-out channels, no rebuild required
-- [ ] Email and Discord adapters
+- [ ] Discord adapter
 - [ ] Per-key rate caps and idempotency keys
 - [ ] Bare-URL webhooks (`POST /hook/<token>`) for senders that can't set headers
 - [ ] `GET /v1/recent` and an `/admin` dashboard

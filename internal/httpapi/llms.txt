@@ -23,7 +23,14 @@ Request fields:
 
 - `title` — required, max 256 bytes.
 - `message` — required, max 4096 bytes. Newlines and tabs survive; other control
-  characters are stripped at ingest.
+  characters are stripped at ingest. Still required when you send `html`: it is
+  the plain-text alternative, and the only thing a text-only channel can show.
+- `html` — optional, max 131072 bytes. A rich body for channels that can render
+  one (email); text-only channels ignore it. A fragment like `<p>done</p>` is
+  wrapped in a styled mail shell; anything starting `<!doctype` or `<html>` is
+  treated as a complete document and used verbatim, so a producer can own the
+  markup. Passed through as written — control characters are stripped and
+  nothing else is.
 - `priority` — optional: `low`, `default`, `high`, `urgent`. Display only. It
   never changes which channels fire.
 - `tags` — optional, max 16.

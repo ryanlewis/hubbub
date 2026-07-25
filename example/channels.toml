@@ -12,6 +12,38 @@ server = "https://ntfy.sh"
 topic = "CHANGE-ME-unguessable-topic"
 token = ""
 
+# Email over SMTP submission. This is the channel that can render the optional
+# `html` field on a request; everything else falls back to a mail composed from
+# the title, message, priority and tags.
+#
+# The settings below are iCloud's, but nothing here is iCloud-specific — point
+# host/port at Fastmail, Gmail or a relay on localhost and it works the same.
+#
+# iCloud specifics worth knowing before you debug this at 2am:
+#   - `password` must be an app-specific password from appleid.apple.com.
+#     Your Apple ID password will not work and two-factor will not prompt.
+#   - `from` has to be your iCloud address or a verified alias. iCloud rewrites
+#     or rejects anything else; you cannot send as a domain you merely own.
+#   - `username` is usually the full address, but some accounts want just the
+#     part before the @. If auth fails with correct credentials, try that.
+#   - There is a daily send limit. Hitting it answers 4xx, which this adapter
+#     parks with rate_limit_cooldown rather than retrying into the wall.
+#
+# This file holds a password now, so it wants 0600 and an owner that is the
+# service user — same as the ntfy token above.
+#
+# [email]
+# type = "smtp"
+# host = "smtp.mail.me.com"
+# port = 587                       # 587 = STARTTLS, 465 = implicit TLS
+# username = "you@icloud.com"
+# password = "abcd-efgh-ijkl-mnop"
+# from = "you@icloud.com"
+# from_name = "hubbub"
+# to = ["you@icloud.com"]          # one or more; all get every notification
+# tls = "starttls"                 # starttls | implicit | none — defaults from port
+# rate_limit_cooldown = "15m"      # how long to park after a "too many messages" 4xx
+
 # enabled = false parks a channel without deleting its credentials, and a
 # parked block is not validated — so you can strip a dead channel's settings
 # without taking the rest of this file down with it.
