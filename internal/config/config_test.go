@@ -348,6 +348,56 @@ func TestLoadConfigRejectsNonPositiveKnobs(t *testing.T) {
 	}
 }
 
+// The example files are both the documented starting point and what
+// `go run . -config example/hubbub.toml` actually loads, so a broken one is a
+// broken first run. TOML makes one mistake easy to miss: every top-level
+// setting must come before the first [table] header, or it silently becomes a
+// key of that table instead — an [ops] block sitting mid-file absorbed every
+// setting after it, and the shipped example refused to start.
+func TestShippedExampleConfigLoads(t *testing.T) {
+	const root = "../.."
+	cfg, err := LoadConfig(filepath.Join(root, "example", "hubbub.toml"))
+	if err != nil {
+		t.Fatalf("the shipped example config must load: %v", err)
+	}
+
+	// Assert on settings whose example values differ from their defaults. An
+	// absorbed setting falls back to its default, so checking one that happens
+	// to match the default (public_port, rate_cap_per_hour) would pass straight
+	// through the bug this guards.
+	if cfg.SpoolDir != "example/spool" {
+		t.Errorf("spool_dir = %q, want \"example/spool\" — a top-level setting has been absorbed into a [table]", cfg.SpoolDir)
+	}
+	if cfg.DeliveryLog != "example/delivery.log" {
+		t.Errorf("delivery_log = %q, want \"example/delivery.log\" — a top-level setting has been absorbed into a [table]", cfg.DeliveryLog)
+	}
+	if cfg.Ops == nil || cfg.Ops.Port != 2112 {
+		t.Errorf("ops = %+v, want the example's port 2112", cfg.Ops)
+	}
+
+	// The paths inside the example config are written relative to the repo
+	// root, because that's where the documented `go run .` is invoked.
+	ring, err := LoadKeys(filepath.Join(root, cfg.KeysFile))
+	if err != nil {
+		t.Fatalf("keys_file %q must load from the repo root: %v", cfg.KeysFile, err)
+	}
+	set, err := LoadChannels(filepath.Join(root, cfg.ChannelsFile))
+	if err != nil {
+		t.Fatalf("channels_file %q must load from the repo root: %v", cfg.ChannelsFile, err)
+	}
+
+	// A permission naming a channel with no config block reports `disabled`,
+	// which is indistinguishable from a deliberate toggle — not a first run
+	// worth handing anyone. Keep the shipped pair consistent.
+	for _, c := range ring.byKey {
+		for _, id := range c.Channels {
+			if _, ok := set.Get(id); !ok {
+				t.Errorf("example keys grant caller %q the channel %q, which example/channels.toml does not configure", c.ID, id)
+			}
+		}
+	}
+}
+
 func TestLoadConfigRejectsUnknownSetting(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "hubbub.toml")
