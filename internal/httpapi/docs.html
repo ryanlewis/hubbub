@@ -18,10 +18,25 @@
     /* Prose is capped far tighter than the shell: tables want every pixel,
        sentences want ~75 characters. One width cannot serve both. */
     --measure: 46rem;
-    /* Everything that pins itself below the header clears both of its rows. */
-    --stuck: calc(var(--bar-h) + var(--keybar-h));
   }
   body { margin: 0; }
+  /* Where a request goes and the key it carries. Under the bar rather than in
+     it: the masthead is the one thing that must look the same on every page,
+     and a row only this page has made it a different height here. It scrolls
+     away with the rest of the page — a Send with no key focuses this field,
+     which brings it back. */
+  .endpointbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem 0.9rem;
+    max-width: var(--shell);
+    margin: 0 auto;
+    padding: 0.85rem 2rem;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .endpointbar code { background: none; padding: 0; color: var(--fg-1); }
+  .endpointbar input { width: 18rem; }
   textarea { width: 100%; max-width: 58rem; min-height: 7.5rem; resize: vertical; line-height: 1.6; }
   .layout {
     display: flex;
@@ -33,7 +48,7 @@
      header is a <nav> too, and every rule here would land on it. */
   nav.toc {
     position: sticky;
-    top: var(--stuck);
+    top: var(--bar-h);
     flex: 0 0 14rem;
     padding: 1.75rem 0 3rem 2rem;
     font-size: 0.875rem;
@@ -66,9 +81,9 @@
     margin-top: 2.25rem;
     padding-top: 1.75rem;
     border-top: 1px dashed var(--rule);
-    /* Jumped to from the rail, so the heading has to clear the header that is
+    /* Jumped to from the rail, so the heading has to clear the bar that is
        still sitting over the top of the page. */
-    scroll-margin-top: calc(var(--stuck) + 0.75rem);
+    scroll-margin-top: calc(var(--bar-h) + 0.75rem);
   }
   section.endpoint h2 { margin: 0 0 0.5rem; font-size: 15px; font-weight: 700; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
   .auth {
@@ -165,12 +180,11 @@
   }
   footer p { max-width: var(--shell); margin: 0 auto; padding: 1.2rem 2rem; }
   @media (max-width: 55rem) {
-    /* The key field wraps onto a line of its own down here, so anything that
-       measures itself against the header has a taller header to clear. */
-    :root { --stuck: calc(var(--bar-h) + var(--keybar-h) + 2rem); }
     /* The endpoint list goes; the site nav stays — it is how you leave. */
     nav.toc { display: none; }
     main { padding: 1.5rem 1.25rem 4rem; }
+    .endpointbar { padding: 0.85rem 1.25rem; }
+    .endpointbar input { flex: 1 1 auto; width: auto; }
     footer p { padding: 1.5rem 1.25rem; }
   }
 </style>
@@ -178,6 +192,14 @@
 <body>
 
 {{template "masthead" .Chrome}}
+
+<div class="endpointbar">
+  <span class="label">Endpoint</span>
+  <code>{{.BaseURL}}</code>
+  <span class="rule"></span>
+  <label class="label" for="apikey">Bearer key</label>
+  <input type="password" id="apikey" autocomplete="off" spellcheck="false" placeholder="kept in this tab only">
+</div>
 
 <div class="layout">
 

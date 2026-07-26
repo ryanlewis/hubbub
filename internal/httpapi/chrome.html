@@ -7,7 +7,10 @@
      own header, and the three had drifted into a sticky full-width bar, a plain
      inline masthead and a third thing: flipping between them was a flinch.
 
-     What a page may add is the row underneath, not a bar of its own. */
+     Nothing page-specific goes in here. The docs page's endpoint and key field
+     were tried as a second row and made this the one page whose header was a
+     different height — the same flinch through a smaller door. They now sit
+     under the bar, as content. */
   :root {
     /* The bar spans the widest page rather than the current one. Pages here run
        50–84rem wide, and a bar that tracked each would slide sideways on every
@@ -19,7 +22,6 @@
        and would otherwise hardcode a number that goes stale the moment anything
        in the bar changes height. */
     --bar-h: 3.25rem;
-    --keybar-h: 3rem;
   }
   header.top {
     position: sticky;
@@ -28,17 +30,16 @@
     background: var(--bg);
     border-bottom: 1px solid var(--rule-strong);
   }
-  header.top .bar,
-  header.top .keybar {
+  header.top .bar {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 0.55rem 0.9rem;
+    min-height: var(--bar-h);
     max-width: var(--bar-w);
     margin: 0 auto;
     padding: 0.5rem 2rem;
   }
-  header.top .bar { min-height: var(--bar-h); }
   header.top h1 {
     margin: 0;
     font-size: 15px;
@@ -50,22 +51,11 @@
      address are data to be read back, not labels. */
   header.top .stamp { font-size: 11px; letter-spacing: 0.06em; color: var(--muted); }
   header.top .stamp b { color: var(--fg); font-weight: 700; }
-  /* Second row: what the docs page's Try-it panels fire at, and the key they
-     carry. It belongs in the header because those panels are spread down the
-     whole page, and the header is the part that stays on screen. */
-  header.top .keybar {
-    min-height: var(--keybar-h);
-    border-top: 1px dashed var(--rule);
-  }
-  header.top .keybar code { background: none; padding: 0; color: var(--fg-1); }
-  header.top .keybar input { width: 18rem; }
   @media (max-width: 55rem) {
     /* The gutter the pages themselves use, so the wordmark lines up with the
        text beneath it once the window is too narrow for the bar to be wider
        than the column. */
-    header.top .bar,
-    header.top .keybar { padding: 0.5rem 1.25rem; }
-    header.top .keybar input { flex: 1 1 auto; width: auto; }
+    header.top .bar { padding: 0.5rem 1.25rem; }
   }
 
   /* Chip group: one outer border with dividers between, active chip inverted.
@@ -109,15 +99,6 @@
     <span class="rule"></span>
     <span class="stamp">{{with .Actor}}<b>{{.}}</b> · {{end}}v{{.Version}}</span>
   </div>
-  {{if .KeyBar}}
-  <div class="keybar">
-    <span class="label">Endpoint</span>
-    <code>{{.BaseURL}}</code>
-    <span class="rule"></span>
-    <label class="label" for="apikey">Bearer key</label>
-    <input type="password" id="apikey" autocomplete="off" spellcheck="false" placeholder="kept in this tab only">
-  </div>
-  {{end}}
 </header>
 {{end}}
 

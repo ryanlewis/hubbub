@@ -45,12 +45,11 @@ type chromeView struct {
 	// Actor is the operator the proxy says is signed in — the dashboard only.
 	// The other two pages are readable by anyone who can reach the hub, so
 	// there is nobody to name.
+	//
+	// It is the only thing a page may put in the bar. Anything else a page
+	// wants to say goes underneath it, as content: a bar that is a different
+	// height on one page is the same flinch this type exists to remove.
 	Actor string
-	// KeyBar adds the docs page's second row: the endpoint its Try-it panels
-	// fire at, and the field the key is typed into. BaseURL is only read when
-	// it is set.
-	KeyBar  bool
-	BaseURL string
 }
 
 // navView is the site navigation, shared by the three pages a browser lands on.

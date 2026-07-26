@@ -101,13 +101,9 @@ func (s *Server) handleDocs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view := buildDocs(&spec)
-	// The bar carries this page's endpoint and key field as its second row, so
-	// the field stays on screen for Try-it panels a long way down the page.
 	view.Chrome = chromeView{
 		Nav:     navView{Current: "/docs", Admin: s.adminLink(r)},
 		Version: view.Version,
-		KeyBar:  true,
-		BaseURL: view.BaseURL,
 	}
 	// A CSP nonce, on this page alone: it is the only surface in hubbub where a
 	// caller's key is typed in, so it is the one worth spending a header on.
