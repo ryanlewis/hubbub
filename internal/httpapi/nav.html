@@ -19,7 +19,12 @@
   }
   .sitenav a:last-child { border-right: 0; }
   .sitenav a:hover { color: var(--fg); background: var(--code-bg); }
-  .sitenav a[aria-current="page"] { background: var(--fg); color: var(--bg); }
+  /* Inverted, like every other active chip — but to the accent rather than to
+     `--fg`. Against the warm paper ground a near-black slab is the highest
+     contrast on the page, and it read as harsh for what is only a "you are
+     here" mark. The rust keeps the reverse-video language and stays well clear
+     of AA in both schemes. */
+  .sitenav a[aria-current="page"] { background: var(--accent); color: var(--bg); }
   .sitenav a:focus-visible { outline-offset: -3px; }
 {{end}}
 
