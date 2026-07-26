@@ -1,24 +1,48 @@
 {{define "theme"}}
+  /* Visual system, adapted from the shout.sh design system.
+
+     What is borrowed: one monospace face for everything, square corners, dashed
+     rules as the separator of record, uppercase micro-labels at 11px/.08em,
+     chip groups that invert when active, and `[ bracket ]` buttons that invert
+     on hover. What is not: shout's pure-black ground and its rule that state is
+     spelled rather than coloured. hubbub keeps its warm paper and rust accent,
+     and keeps hue on the three things an operator must not misread — a diff, a
+     destructive button, and a grant that points at a paused channel. The
+     grammar is shared; the surface is hubbub's own.
+
+     The mono stack is the system one rather than shout's Google-hosted
+     JetBrains Mono. Every page here is served under `default-src 'none'` with
+     nonced styles, and a webfont would mean both widening that policy and
+     putting a request to Google in front of first paint on a private instance
+     that is deliberately not on the public internet. */
   :root {
     color-scheme: light dark;
     --bg: #fbfaf8;
     --panel: #ffffff;
     --fg: #1c1b19;
+    --fg-1: #45443e;
     --muted: #6f6d67;
-    --rule: #e7e4de;
+    --fg-3: #9c9a92;
+    --rule: #e0ddd6;
+    --rule-strong: #b6b2a9;
     --code-bg: #f2f0eb;
     --accent: #a1500c;
     --ok: #2f6d38;
     --warn: #96631a;
     --err: #a32b26;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+            "DejaVu Sans Mono", monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #171614;
       --panel: #1d1c19;
       --fg: #e9e7e2;
+      --fg-1: #c3c0b8;
       --muted: #9b9891;
+      --fg-3: #6b6961;
       --rule: #2c2a26;
+      --rule-strong: #57544d;
       --code-bg: #201f1c;
       --accent: #e39a4e;
       --ok: #7fbb87;
@@ -27,26 +51,108 @@
     }
   }
   * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
     background: var(--bg);
     color: var(--fg);
-    font: 16px/1.65 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    -webkit-text-size-adjust: 100%;
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.6;
+    /* Terminals don't ligate, and `->` in a payload should read as two glyphs. */
+    font-variant-ligatures: none;
+    -webkit-font-smoothing: antialiased;
   }
-  a { color: var(--accent); }
+  a { color: var(--accent); text-underline-offset: 2px; }
+  ::selection { background: var(--fg); color: var(--bg); }
+  /* Dashed, like every other rule in the system, so focus reads as part of the
+     grammar rather than as the browser's own ring. */
+  :focus-visible { outline: 1px dashed var(--fg); outline-offset: 2px; }
+
+  /* The uppercase 11px/.08em run that carries every piece of secondary chrome:
+     section heads, column heads, field labels, counts, the footer. */
+  .label {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  /* A rule that eats whatever slack is left in a flex row — the masthead
+     separator, and the trailing half of a section head. */
+  .rule { flex: 1 1 2rem; border-top: 1px dashed var(--rule); height: 0; }
+
+  /* One face throughout means inline code needs no family of its own; it is
+     marked by its ground, not by a switch of typeface. */
   code, kbd {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.875em;
+    font-family: inherit;
+    font-size: 0.95em;
     background: var(--code-bg);
-    padding: 0.1em 0.35em;
-    border-radius: 3px;
+    color: var(--fg-1);
+    padding: 0.05rem 0.3rem;
   }
+  kbd { background: none; border: 1px solid var(--fg-3); color: var(--fg); }
   pre {
-    padding: 1rem;
+    padding: 0.85rem 1rem;
     overflow-x: auto;
     background: var(--code-bg);
     border: 1px solid var(--rule);
-    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.65;
   }
-  pre code { padding: 0; background: none; font-size: 0.8125rem; line-height: 1.7; }
+  pre code { padding: 0; background: none; color: inherit; font-size: inherit; }
+
+  /* Buttons wear their brackets in CSS — decorative, so the accessible name
+     stays the label alone. Hover inverts, which is the whole button language. */
+  button, .btn {
+    font: inherit;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.15rem 0.5rem;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--muted);
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  button::before, .btn::before { content: "["; color: var(--fg-3); margin-right: 0.35rem; }
+  button::after, .btn::after { content: "]"; color: var(--fg-3); margin-left: 0.35rem; }
+  button:hover, .btn:hover,
+  button:hover::before, .btn:hover::before,
+  button:hover::after, .btn:hover::after { color: var(--bg); }
+  button:hover, .btn:hover { background: var(--fg); }
+  /* The one button that reads as the way forward out of a form. */
+  button.primary, .btn.primary { color: var(--accent); font-weight: 700; }
+  button.primary:hover, .btn.primary:hover { background: var(--accent); }
+  button.danger:hover, .btn.danger:hover { background: var(--err); }
+  button[disabled], .btn[disabled] { color: var(--fg-3); cursor: not-allowed; }
+  button[disabled]:hover, .btn[disabled]:hover { background: none; color: var(--fg-3); }
+  button[disabled]:hover::before, .btn[disabled]:hover::before,
+  button[disabled]:hover::after, .btn[disabled]:hover::after { color: var(--fg-3); }
+  button:focus-visible, .btn:focus-visible { outline-offset: -1px; }
+
+  /* Outline badges throughout, so that exactly one thing in a row is loud. */
+  .badge {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.1rem 0.4rem;
+    border: 1px solid currentColor;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
+
+  input, select, textarea {
+    font: inherit;
+    font-size: 13px;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--rule-strong);
+    border-radius: 0;
+    background: var(--code-bg);
+    color: var(--fg);
+  }
+  input::placeholder { color: var(--fg-3); }
+  input:focus-visible, select:focus-visible, textarea:focus-visible { outline-offset: -3px; }
 {{end}}

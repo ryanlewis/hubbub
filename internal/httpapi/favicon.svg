@@ -1,8 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="hubbub">
   <!-- One hub, three channels. The mark is the architecture, and a solid tile
        rather than bare strokes because a favicon has to hold up against both a
-       light and a dark tab strip with no way to ask which it landed on. -->
-  <rect width="32" height="32" rx="7" fill="#a1500c"/>
+       light and a dark tab strip with no way to ask which it landed on. The
+       tile is square because the system ships one radius token and it is 0 —
+       this is the only drawn mark here, so it is the one that has to agree. -->
+  <rect width="32" height="32" fill="#a1500c"/>
   <g stroke="#fbfaf8" stroke-width="2.4" stroke-linecap="round">
     <path d="M16 16 L16 6.5"/>
     <path d="M16 16 L24.2 20.8"/>

@@ -13,76 +13,104 @@
 {{template "theme"}}
 {{template "navstyle"}}
   body {
-    max-width: 46rem;
+    max-width: 50rem;
     margin: 0 auto;
-    padding: 2.25rem 1.25rem 4rem;
+    padding: 1.75rem 1.25rem 4rem;
   }
-  .sitenav { margin-bottom: 2.5rem; }
-  h1 {
+  /* Masthead: wordmark, a rule that eats the slack, then the nav and version. */
+  header.top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.85rem;
+    margin-bottom: 1.75rem;
+  }
+  header.top h1 {
     margin: 0;
-    font-size: 2rem;
-    letter-spacing: -0.02em;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
   }
+  /* Section heads are micro-labels with the rule carried out to the margin,
+     which is what marks a new section here — there is no larger type to do it. */
   h2 {
-    margin: 2.75rem 0 0.75rem;
-    padding-top: 1.25rem;
-    border-top: 1px solid var(--rule);
-    font-size: 1rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    margin: 2.5rem 0 1rem;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--muted);
   }
-  p { margin: 0 0 1rem; }
-  .tagline { margin: 0.4rem 0 0; font-size: 1.1rem; }
-  .version {
-    display: inline-block;
-    margin-top: 0.9rem;
-    padding: 0.1rem 0.5rem;
-    border: 1px solid var(--rule);
-    border-radius: 999px;
-    font: 0.75rem/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    color: var(--muted);
-  }
+  h2::before { content: "\2500\2500"; color: var(--fg-3); letter-spacing: 0; }
+  h2::after { content: ""; flex: 1; border-top: 1px dashed var(--rule); }
+  p { margin: 0 0 1rem; max-width: 74ch; color: var(--fg-1); }
+  .tagline { margin: 0 0 1.5rem; color: var(--fg); font-size: 15px; }
+  /* The left rail is the whole signal: this block is a standing condition of
+     the instance, not a step in the sequence of sections below it. */
   .note {
-    margin: 2rem 0 0;
-    padding: 0.9rem 1.1rem;
-    border-left: 3px solid var(--accent);
+    margin: 0 0 1rem;
+    padding: 0.7rem 0.9rem;
+    border: 1px solid var(--rule);
+    border-left: 2px solid var(--accent);
     background: var(--code-bg);
-    border-radius: 0 4px 4px 0;
+    max-width: 74ch;
   }
+  .note p { margin: 0; }
   pre { margin: 0 0 1rem; }
   .scroll { overflow-x: auto; margin: 0 0 1rem; }
-  table { border-collapse: collapse; width: 100%; font-size: 0.9375rem; }
-  th, td { text-align: left; padding: 0.4rem 0.9rem 0.4rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
-  th { color: var(--muted); font-weight: 600; font-size: 0.8125rem; }
-  td:first-child { white-space: nowrap; }
-  ul { margin: 0 0 1rem; padding-left: 1.1rem; }
-  li { margin-bottom: 0.4rem; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 0.45rem 0.9rem 0.45rem 0; vertical-align: top; }
+  th {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--rule-strong);
+  }
+  td { border-bottom: 1px dashed var(--rule); color: var(--fg-1); }
+  td:first-child, td:nth-child(2) { white-space: nowrap; }
+  /* The status class is the one thing to read down this column at a glance. */
+  td .s2 { color: var(--ok); }
+  td .s4 { color: var(--warn); }
+  td .s5 { color: var(--err); }
+  ul { margin: 0 0 1rem; padding: 0; list-style: none; max-width: 74ch; }
+  li { margin-bottom: 0.4rem; padding-left: 1.1rem; position: relative; color: var(--fg-1); }
+  li::before { content: "\00b7"; position: absolute; left: 0.35rem; color: var(--fg-3); }
   footer {
     margin-top: 3rem;
-    padding-top: 1.25rem;
-    border-top: 1px solid var(--rule);
-    font-size: 0.875rem;
-    color: var(--muted);
+    padding-top: 0.9rem;
+    border-top: 1px dashed var(--rule);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-3);
   }
+  footer p { color: inherit; max-width: none; margin: 0; }
 </style>
 </head>
 <body>
 
-{{template "nav" .Nav}}
-
-<header>
+<header class="top">
   <h1>hubbub</h1>
-  <p class="tagline">One authenticated endpoint in — notifications out to the operator's channels.</p>
-  <p class="version">v{{.Version}}</p>
+  <span class="rule"></span>
+  {{template "nav" .Nav}}
+  <span class="label">v{{.Version}}</span>
 </header>
 
-<p class="note">
-  This is a private instance, not a public service. There is no signup: callers
-  are machines, each issued a key by the operator. Without one you get a
-  <code>401</code> and nothing else.
-</p>
+<p class="tagline">One authenticated endpoint in — notifications out to the operator's channels.</p>
+
+<div class="note">
+  <p>
+    This is a private instance, not a public service. There is no signup: callers
+    are machines, each issued a key by the operator. Without one you get a
+    <code>401</code> and nothing else.
+  </p>
+</div>
 
 <h2>Sending</h2>
 
@@ -130,14 +158,14 @@ code; <code>result</code> repeats it in the body.</p>
 <table>
   <thead><tr><th>Status</th><th><code>result</code></th><th></th></tr></thead>
   <tbody>
-    <tr><td><code>200</code></td><td><code>delivered</code></td><td>Every selected channel delivered inside the response window</td></tr>
-    <tr><td><code>202</code></td><td><code>queued</code></td><td>Accepted and durably spooled; nothing delivered yet</td></tr>
-    <tr><td><code>207</code></td><td><code>partial</code></td><td>Mixed — the per-channel map says which was which</td></tr>
-    <tr><td><code>400</code></td><td>—</td><td>Malformed, or a field the API doesn't know</td></tr>
-    <tr><td><code>401</code></td><td>—</td><td>Missing or unknown key</td></tr>
-    <tr><td><code>403</code></td><td>—</td><td>Channel not permitted for this key</td></tr>
-    <tr><td><code>429</code></td><td><code>rate_capped</code></td><td>Global cap hit; honour <code>Retry-After</code></td></tr>
-    <tr><td><code>502</code></td><td><code>failed</code></td><td>Every selected channel failed permanently</td></tr>
+    <tr><td><b class="s2">200</b></td><td><code>delivered</code></td><td>Every selected channel delivered inside the response window</td></tr>
+    <tr><td><b class="s2">202</b></td><td><code>queued</code></td><td>Accepted and durably spooled; nothing delivered yet</td></tr>
+    <tr><td><b class="s2">207</b></td><td><code>partial</code></td><td>Mixed — the per-channel map says which was which</td></tr>
+    <tr><td><b class="s4">400</b></td><td>—</td><td>Malformed, or a field the API doesn't know</td></tr>
+    <tr><td><b class="s4">401</b></td><td>—</td><td>Missing or unknown key</td></tr>
+    <tr><td><b class="s4">403</b></td><td>—</td><td>Channel not permitted for this key</td></tr>
+    <tr><td><b class="s4">429</b></td><td><code>rate_capped</code></td><td>Global cap hit; honour <code>Retry-After</code></td></tr>
+    <tr><td><b class="s5">502</b></td><td><code>failed</code></td><td>Every selected channel failed permanently</td></tr>
   </tbody>
 </table>
 </div>

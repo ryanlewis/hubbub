@@ -1,21 +1,26 @@
 {{define "navstyle"}}
+  /* Chip group: one outer border with dividers between, active chip inverted.
+     Chrome, not content — the links stay quiet until hovered so that three of
+     them above the title don't read as the substance of the page. */
   .sitenav {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.2rem 1.1rem;
-    align-items: baseline;
-    font-size: 0.875rem;
+    border: 1px solid var(--rule-strong);
   }
   .sitenav a {
-    /* Muted until hovered, and never underlined: this is chrome, and three
-       accent-coloured links above the title read as the content of the page. */
+    padding: 0.25rem 0.65rem;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     color: var(--muted);
     text-decoration: none;
-    padding: 0.15rem 0;
-    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    border-right: 1px solid var(--rule-strong);
   }
-  .sitenav a:hover { color: var(--accent); }
-  .sitenav a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--accent); }
+  .sitenav a:last-child { border-right: 0; }
+  .sitenav a:hover { color: var(--fg); background: var(--code-bg); }
+  .sitenav a[aria-current="page"] { background: var(--fg); color: var(--bg); }
+  .sitenav a:focus-visible { outline-offset: -3px; }
 {{end}}
 
 {{define "nav"}}

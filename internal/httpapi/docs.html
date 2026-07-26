@@ -22,31 +22,29 @@
     position: sticky;
     top: 0;
     z-index: 2;
-    border-bottom: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule-strong);
     background: var(--bg);
   }
   header .bar {
     max-width: var(--shell);
     margin: 0 auto;
-    padding: 0.9rem 2rem;
+    padding: 0.8rem 2rem;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem 1.25rem;
-    align-items: baseline;
+    gap: 0.75rem 1.1rem;
+    align-items: center;
   }
-  header h1 { margin: 0; font-size: 1.15rem; letter-spacing: -0.01em; }
-  header .base { color: var(--muted); font-size: 0.8125rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  header h1 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  header h1 .base { letter-spacing: 0.08em; }
+  header .base { color: var(--muted); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
   header .key { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
-  header .key label { font-size: 0.8125rem; color: var(--muted); }
-  input[type=password], textarea {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.8125rem;
-    color: var(--fg);
-    background: var(--panel);
-    border: 1px solid var(--rule);
-    border-radius: 5px;
-    padding: 0.35rem 0.5rem;
-  }
+  header .key label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
   input[type=password] { width: 18rem; }
   textarea { width: 100%; max-width: 58rem; min-height: 7.5rem; resize: vertical; line-height: 1.6; }
   .layout {
@@ -64,95 +62,130 @@
     padding: 1.75rem 0 3rem 2rem;
     font-size: 0.875rem;
   }
-  nav.toc p { margin: 0 0 0.6rem; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-  nav.toc a { display: block; padding: 0.2rem 0; text-decoration: none; color: var(--fg); }
+  nav.toc p { margin: 0 0 0.6rem; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding-bottom: 0.4rem; border-bottom: 1px dashed var(--rule); }
+  nav.toc a { display: flex; gap: 0.5rem; align-items: center; padding: 0.25rem 0; text-decoration: none; color: var(--fg-1); font-size: 13px; }
   nav.toc a:hover { color: var(--accent); }
-  nav.toc a code { background: none; padding: 0; }
+  nav.toc a code { background: none; padding: 0; color: inherit; }
   main { flex: 1 1 auto; min-width: 0; padding: 1.75rem 2rem 6rem; }
   .lede { color: var(--muted); }
   .lede p { margin: 0 0 0.9rem; max-width: var(--measure); }
-  .summary, section.endpoint > p { max-width: var(--measure); }
+  .summary, section.endpoint > p { max-width: var(--measure); color: var(--fg-1); }
+  /* Outline, like every other badge here, so the verb reads as a label on the
+     path rather than as the loudest thing in the row. */
   .verb {
     display: inline-block;
-    min-width: 3.4rem;
+    min-width: 3.2rem;
     text-align: center;
-    padding: 0.1rem 0.4rem;
-    border-radius: 4px;
-    font: 600 0.6875rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    letter-spacing: 0.05em;
-    color: var(--panel);
-    background: var(--muted);
+    padding: 0.05rem 0.35rem;
+    border: 1px solid currentColor;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.6;
+    letter-spacing: 0.1em;
+    color: var(--muted);
   }
-  .verb-post { background: var(--ok); }
-  .verb-get { background: var(--accent); }
+  .verb-post { color: var(--ok); }
+  .verb-get { color: var(--accent); }
   section.endpoint {
-    margin-top: 2rem;
+    margin-top: 2.25rem;
     padding-top: 1.75rem;
-    border-top: 1px solid var(--rule);
+    border-top: 1px dashed var(--rule);
     scroll-margin-top: 4.5rem;
   }
-  section.endpoint h2 { margin: 0 0 0.35rem; font-size: 1.0625rem; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
-  section.endpoint h2 .path { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-  .auth { font-size: 0.75rem; color: var(--muted); border: 1px solid var(--rule); border-radius: 999px; padding: 0.05rem 0.5rem; }
+  section.endpoint h2 { margin: 0 0 0.5rem; font-size: 15px; font-weight: 700; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+  .auth {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    border: 1px dashed currentColor;
+    padding: 0.05rem 0.4rem;
+  }
   .summary { margin: 0 0 0.75rem; }
-  h3 { margin: 1.5rem 0 0.5rem; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  h3 {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    margin: 1.75rem 0 0.6rem;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  h3::after { content: ""; flex: 1; border-top: 1px dashed var(--rule); }
   .scroll { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; max-width: 76rem; font-size: 0.9375rem; }
-  th, td { text-align: left; padding: 0.45rem 1.25rem 0.45rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
-  th { font-size: 0.75rem; color: var(--muted); font-weight: 600; }
-  td.name { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8125rem; white-space: nowrap; }
-  td.type { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8125rem; white-space: nowrap; }
+  table { border-collapse: collapse; width: 100%; max-width: 76rem; font-size: 13px; }
+  th, td { text-align: left; padding: 0.45rem 1.25rem 0.45rem 0; vertical-align: top; }
+  th {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--rule-strong);
+  }
+  td { border-bottom: 1px dashed var(--rule); color: var(--fg-1); }
+  td.name { font-weight: 700; color: var(--fg); white-space: nowrap; }
+  td.type { color: var(--muted); white-space: nowrap; }
   /* Explicit widths: auto layout starves this column and stacks an enum one
      word per line, which reads as noise rather than a list of values. */
   th:nth-child(1), th:nth-child(2) { width: 1%; }
   th:nth-child(3) { width: 15rem; }
-  td.rules { font-size: 0.8125rem; color: var(--muted); }
+  td.rules { color: var(--muted); }
   .req { color: var(--err); }
-  .status-list { list-style: none; margin: 0; padding: 0; }
-  .status-list { max-width: 68rem; }
-  .status-list li { padding: 0.5rem 0; border-bottom: 1px solid var(--rule); display: flex; gap: 0.75rem; align-items: baseline; }
-  .status-list .code { font: 600 0.875rem/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; min-width: 2.5rem; }
+  .status-list { list-style: none; margin: 0; padding: 0; max-width: 68rem; }
+  .status-list li { padding: 0.5rem 0; border-bottom: 1px dashed var(--rule); display: flex; gap: 0.75rem; align-items: baseline; color: var(--fg-1); }
+  .status-list .code { font-weight: 700; min-width: 2.5rem; }
   .s2 { color: var(--ok); }
   .s4 { color: var(--warn); }
   .s5 { color: var(--err); }
   details { margin: 0.4rem 0 0; }
-  details summary { cursor: pointer; font-size: 0.8125rem; color: var(--muted); }
+  details summary {
+    cursor: pointer;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  details summary:hover { color: var(--fg); }
   details pre { margin: 0.5rem 0 0; }
   form.try {
     margin: 0.75rem 0 0;
     max-width: 60rem;
-    padding: 1rem;
+    padding: 0.9rem 1rem;
     border: 1px solid var(--rule);
-    border-radius: 6px;
     background: var(--panel);
   }
-  form.try .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.6rem; }
-  button {
-    font: inherit;
-    font-size: 0.8125rem;
-    padding: 0.3rem 0.85rem;
-    border: 1px solid var(--rule);
-    border-radius: 5px;
-    background: var(--code-bg);
-    color: var(--fg);
-    cursor: pointer;
-  }
-  button.send { border-color: var(--accent); color: var(--accent); font-weight: 600; }
-  button:hover { border-color: var(--accent); }
+  form.try .row { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.6rem; }
+  /* Example names come from the spec, not from this page — `richEmail` survives
+     as itself, where the uppercasing every other button gets turns it into
+     RICHEMAIL and loses the word boundary. */
+  button.ex { text-transform: none; letter-spacing: 0; font-size: 13px; }
+  button.send { color: var(--accent); font-weight: 700; }
+  button.send:hover { background: var(--accent); }
+  /* Left rail, as everywhere else here: a standing warning about the request
+     this panel is about to actually fire, not a step in the sequence. */
   .danger {
     margin: 0 0 0.75rem;
     max-width: var(--measure);
-    padding: 0.55rem 0.75rem;
-    border-left: 3px solid var(--err);
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--rule);
+    border-left: 2px solid var(--err);
     background: var(--code-bg);
-    border-radius: 0 4px 4px 0;
-    font-size: 0.8125rem;
+    font-size: 13px;
   }
   .out { margin-top: 0.75rem; }
-  .out .line { font: 600 0.875rem/1.8 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .out .line { font-weight: 700; letter-spacing: 0.04em; }
   .out pre { margin: 0.4rem 0 0; max-height: 22rem; }
-  footer { border-top: 1px solid var(--rule); font-size: 0.8125rem; color: var(--muted); }
-  footer p { max-width: var(--shell); margin: 0 auto; padding: 1.5rem 2rem; }
+  footer {
+    border-top: 1px dashed var(--rule);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+  }
+  footer p { max-width: var(--shell); margin: 0 auto; padding: 1.2rem 2rem; }
   @media (max-width: 55rem) {
     /* The endpoint list goes; the site nav stays — it is how you leave. */
     nav.toc { display: none; }
@@ -170,6 +203,7 @@
   <div class="bar">
     <h1>{{.Title}} <span class="base">v{{.Version}}</span></h1>
     <span class="base">{{.BaseURL}}</span>
+    <span class="rule"></span>
     {{template "nav" .Nav}}
     <span class="key">
       <label for="apikey">Bearer key</label>
