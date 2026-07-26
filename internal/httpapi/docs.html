@@ -8,6 +8,7 @@
 <title>{{.Title}} API reference</title>
 <style nonce="{{.Nonce}}">
 {{template "theme"}}
+{{template "navstyle"}}
   :root {
     /* The page shell. Left unbounded, the flex layout pins everything to the
        left edge and a wide monitor gets two thirds of a screen of nothing. */
@@ -54,17 +55,19 @@
     max-width: var(--shell);
     margin: 0 auto;
   }
-  nav {
+  /* Scoped to .toc rather than left on the bare element: the site nav in the
+     header is a <nav> too, and every rule here would land on it. */
+  nav.toc {
     position: sticky;
     top: 3.6rem;
     flex: 0 0 14rem;
     padding: 1.75rem 0 3rem 2rem;
     font-size: 0.875rem;
   }
-  nav p { margin: 0 0 0.6rem; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-  nav a { display: block; padding: 0.2rem 0; text-decoration: none; color: var(--fg); }
-  nav a:hover { color: var(--accent); }
-  nav a code { background: none; padding: 0; }
+  nav.toc p { margin: 0 0 0.6rem; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  nav.toc a { display: block; padding: 0.2rem 0; text-decoration: none; color: var(--fg); }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc a code { background: none; padding: 0; }
   main { flex: 1 1 auto; min-width: 0; padding: 1.75rem 2rem 6rem; }
   .lede { color: var(--muted); }
   .lede p { margin: 0 0 0.9rem; max-width: var(--measure); }
@@ -151,7 +154,8 @@
   footer { border-top: 1px solid var(--rule); font-size: 0.8125rem; color: var(--muted); }
   footer p { max-width: var(--shell); margin: 0 auto; padding: 1.5rem 2rem; }
   @media (max-width: 55rem) {
-    nav { display: none; }
+    /* The endpoint list goes; the site nav stays — it is how you leave. */
+    nav.toc { display: none; }
     main { padding: 1.5rem 1.25rem 4rem; }
     header .bar { padding: 0.9rem 1.25rem; }
     footer p { padding: 1.5rem 1.25rem; }
@@ -166,6 +170,7 @@
   <div class="bar">
     <h1>{{.Title}} <span class="base">v{{.Version}}</span></h1>
     <span class="base">{{.BaseURL}}</span>
+    {{template "nav" .Nav}}
     <span class="key">
       <label for="apikey">Bearer key</label>
       <input type="password" id="apikey" autocomplete="off" spellcheck="false" placeholder="kept in this tab only">
@@ -175,7 +180,7 @@
 
 <div class="layout">
 
-<nav>
+<nav class="toc">
   <p>Endpoints</p>
   {{range .Endpoints}}
     <a href="#{{.ID}}"><span class="verb verb-{{.MethodClass}}">{{.Method}}</span> <code>{{.Path}}</code></a>

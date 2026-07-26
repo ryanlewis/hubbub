@@ -33,6 +33,7 @@ type docsView struct {
 	Description []template.HTML
 	Endpoints   []endpointView
 	Nonce       string
+	Nav         navView
 }
 
 type endpointView struct {
@@ -100,6 +101,7 @@ func (s *Server) handleDocs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view := buildDocs(&spec)
+	view.Nav = navView{Current: "/docs", Admin: s.adminLink(r)}
 	// A CSP nonce, on this page alone: it is the only surface in hubbub where a
 	// caller's key is typed in, so it is the one worth spending a header on.
 	// Fresh per request — a fixed nonce is the same as no nonce.

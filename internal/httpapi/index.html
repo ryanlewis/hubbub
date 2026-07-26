@@ -11,11 +11,13 @@
 <title>hubbub</title>
 <style>
 {{template "theme"}}
+{{template "navstyle"}}
   body {
     max-width: 46rem;
     margin: 0 auto;
-    padding: 3.5rem 1.25rem 4rem;
+    padding: 2.25rem 1.25rem 4rem;
   }
+  .sitenav { margin-bottom: 2.5rem; }
   h1 {
     margin: 0;
     font-size: 2rem;
@@ -67,6 +69,8 @@
 </style>
 </head>
 <body>
+
+{{template "nav" .Nav}}
 
 <header>
   <h1>hubbub</h1>

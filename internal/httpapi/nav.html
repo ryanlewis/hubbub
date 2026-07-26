@@ -1,0 +1,27 @@
+{{define "navstyle"}}
+  .sitenav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem 1.1rem;
+    align-items: baseline;
+    font-size: 0.875rem;
+  }
+  .sitenav a {
+    /* Muted until hovered, and never underlined: this is chrome, and three
+       accent-coloured links above the title read as the content of the page. */
+    color: var(--muted);
+    text-decoration: none;
+    padding: 0.15rem 0;
+    border-bottom: 2px solid transparent;
+  }
+  .sitenav a:hover { color: var(--accent); }
+  .sitenav a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--accent); }
+{{end}}
+
+{{define "nav"}}
+<nav class="sitenav" aria-label="Site">
+  <a href="/"{{if eq .Current "/"}} aria-current="page"{{end}}>Home</a>
+  <a href="/docs"{{if eq .Current "/docs"}} aria-current="page"{{end}}>API docs</a>
+  {{if .Admin}}<a href="/admin"{{if eq .Current "/admin"}} aria-current="page"{{end}}>Admin</a>{{end}}
+</nav>
+{{end}}

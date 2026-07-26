@@ -64,8 +64,8 @@ func (s *Server) PublicMux() *http.ServeMux {
 	// subtree pattern: that would answer every unrouted path with the landing
 	// page, turning a caller's typo'd URL into 200 OK full of HTML instead of
 	// the 404 it needs to see.
-	mux.HandleFunc("GET /{$}", handleIndex)
-	mux.HandleFunc("GET /index.html", handleIndex)
+	mux.HandleFunc("GET /{$}", handleIndex(s.adminLink))
+	mux.HandleFunc("GET /index.html", handleIndex(s.adminLink))
 	mux.HandleFunc("GET /llms.txt", handleLLMsTxt)
 	mux.HandleFunc("GET /favicon.svg", handleFavicon)
 	// The browsable reference. Rendered from the same resolved spec, so it can

@@ -8,6 +8,7 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style nonce="{{.Nonce}}">
 {{template "theme"}}
+{{template "navstyle"}}
 body {
   max-width: 60rem;
   margin: 0 auto;
@@ -23,6 +24,9 @@ header.top {
   border-bottom: 1px solid var(--rule);
 }
 header.top h1 { font-size: 1.25rem; margin: 0; }
+/* Sits with the title; the auto margin is what keeps the identity on the right
+   once space-between has three children to spread. */
+header.top .sitenav { margin-right: auto; }
 .who { color: var(--muted); font-size: 0.875rem; }
 .version {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -162,6 +166,7 @@ code, .mono {
 
 <header class="top">
   <h1>hubbub admin</h1>
+  {{template "nav" .Nav}}
   <span class="who">{{.Actor}} · <span class="version">v{{.Version}}</span></span>
 </header>
 

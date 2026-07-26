@@ -49,6 +49,21 @@ func secretish(name string) bool {
 	return false
 }
 
+// adminLink reports whether the dashboard belongs in this visitor's navigation.
+//
+// Deliberately the same question the guard would answer on /admin itself, asked
+// early: a link that leads to a login redirect or a 403 is worse than no link,
+// and on a hub reachable from the internet the bar would otherwise announce a
+// dashboard to every anonymous reader. Safe on a nil *Admin, because the pages
+// that call it are served whether or not one is configured.
+func (s *Server) adminLink(r *http.Request) bool {
+	if s.Admin == nil {
+		return false
+	}
+	_, _, permitted := s.Admin.Guard.Identity(r)
+	return permitted
+}
+
 // adminRoutes registers the dashboard. Everything is behind the guard, and
 // every mutation is behind the CSRF check as well.
 func (s *Server) adminRoutes(mux *http.ServeMux) {
@@ -85,6 +100,7 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 
 type adminView struct {
 	Nonce      string
+	Nav        navView
 	Version    string
 	Actor      string
 	Channels   []adminChannel
@@ -151,6 +167,9 @@ func (s *Server) renderAdmin(w http.ResponseWriter, r *http.Request, v *adminVie
 	v.Actor = id.Email
 	v.Version = Version
 	v.Nonce = rand.Text()
+	// Not adminLink(r): reaching this render means the guard already let the
+	// visitor through, so asking again could only ever disagree with itself.
+	v.Nav = navView{Current: "/admin", Admin: true}
 	if err := s.fillAdminState(v); err != nil {
 		v.Error = strings.TrimSpace(v.Error + "\n" + err.Error())
 	}

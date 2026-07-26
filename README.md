@@ -458,6 +458,12 @@ accounts is the usual cause.
 > dashboard is whatever the caller says it is too. hubbub logs this warning at
 > every start rather than leaving it to be remembered.
 
+`/`, `/docs` and `/admin` share a navigation bar, and the dashboard link on it
+is decided per visitor: it appears for an address on `allowed_emails` and for
+nobody else. The first two pages are readable by anyone who can reach the hub,
+so a link everyone can see would be a dead end for them and a signpost for
+everyone else.
+
 Notes on how it treats your files, since they hold every credential you have:
 
 - **Comments survive.** Edits are line-level splices, not a decode/re-encode

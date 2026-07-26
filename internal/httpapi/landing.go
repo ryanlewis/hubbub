@@ -13,8 +13,10 @@ import (
 // The pages served to readers who arrive without a key. `theme.html` holds only
 // the shared colour tokens, so a palette change lands on every page at once
 // instead of being reapplied by hand to whichever ones someone remembers.
+// `nav.html` is the same bargain for the site navigation, markup and style
+// together: a link added there appears on all three pages or on none.
 //
-//go:embed index.html docs.html admin.html theme.html llms.txt
+//go:embed index.html docs.html admin.html nav.html theme.html llms.txt
 var pages embed.FS
 
 // Embedded separately from pages: it is served as bytes, never templated, and
@@ -30,6 +32,18 @@ var faviconSVG []byte
 type pageData struct {
 	BaseURL string
 	Version string
+	Nav     navView
+}
+
+// navView is the site navigation, shared by the three pages a browser lands on.
+//
+// The dashboard link is per-visitor rather than per-deployment: a hub with no
+// [admin] block does not serve /admin at all, and one that does still refuses
+// everybody but the allowlist. Offering the link to a reader who would be
+// bounced is a dead end that also tells the internet the dashboard is there.
+type navView struct {
+	Current string // the page being rendered, marked as current in the bar
+	Admin   bool   // whether this visitor is offered the dashboard
 }
 
 // Parsed on first use rather than in an init(), and deliberately without
@@ -39,7 +53,7 @@ type pageData struct {
 // TestLandingTemplatesParse is what keeps it out of a shipped binary.
 var (
 	htmlPages = sync.OnceValues(func() (*htmltmpl.Template, error) {
-		return htmltmpl.ParseFS(pages, "theme.html", "index.html", "docs.html", "admin.html")
+		return htmltmpl.ParseFS(pages, "theme.html", "nav.html", "index.html", "docs.html", "admin.html")
 	})
 	llmsTmpl = sync.OnceValues(func() (*texttmpl.Template, error) {
 		return texttmpl.ParseFS(pages, "llms.txt")
@@ -54,14 +68,24 @@ var (
 // that it cannot put any of them on a public page by accident. The docs page
 // does take the server, because rendering the spec is exactly the job of
 // reflecting this deployment — see docs.go.
-func handleIndex(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := htmlPages()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "landing page unavailable")
-		return
+//
+// adminLink is the one thing the page needs that only the server knows, and it
+// is taken as a callback returning a single bool rather than as the server
+// itself: the guarantee above is worth more than the argument it saves.
+func handleIndex(adminLink func(*http.Request) bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tmpl, err := htmlPages()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "landing page unavailable")
+			return
+		}
+		data := pageData{
+			BaseURL: baseURL(r),
+			Version: Version,
+			Nav:     navView{Current: "/", Admin: adminLink(r)},
+		}
+		renderPageTemplate(w, tmpl, "index.html", data, "text/html; charset=utf-8")
 	}
-	data := pageData{BaseURL: baseURL(r), Version: Version}
-	renderPageTemplate(w, tmpl, "index.html", data, "text/html; charset=utf-8")
 }
 
 // handleLLMsTxt serves the llms.txt convention (llmstxt.org): the same contract
