@@ -162,7 +162,7 @@ needs touching: `channels.toml` picks it up by `type`.
 `type` is one of `feat` `fix` `docs` `style` `refactor` `perf` `test` `build`
 `ci` `chore` `revert`. `scope` is optional and names the area rather than the
 file: `config`, `httpapi`, `admin`, `adapter`, `outbox`. Repo-wide changes take
-no scope. Subjects stay within 72 characters.
+no scope. `deps` is Renovate's, not yours. Subjects stay within 72 characters.
 
 `style` here means presentation only — the served pages' CSS and layout. Code
 formatting is not a commit of its own; `gofmt` is a CI gate.

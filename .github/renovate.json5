@@ -1,0 +1,71 @@
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+
+  // JSON5 rather than JSON for the same reason the config files are TOML: this
+  // is a hand-edited operational file, and the reasoning behind a rule is worth
+  // more than the two characters the comment syntax costs.
+
+  extends: [
+    'config:recommended',
+    ':dependencyDashboard',
+
+    // Pin actions to a commit digest instead of a floating tag. A tag is a
+    // mutable pointer in someone else's repository, so `@v4` is a standing
+    // agreement to run whatever that account publishes next; a digest is not.
+    // Renovate keeps the digests current and writes the version beside them,
+    // so the readability this costs is one comment per line.
+    'helpers:pinGitHubActionDigests',
+  ],
+
+  timezone: 'Europe/London',
+
+  // Batched into Monday morning rather than arriving whenever an upstream
+  // publishes. Four managed dependencies will not fill a weekly slot, and
+  // notifications that arrive constantly get filtered rather than read.
+  schedule: ['before 9am on monday'],
+
+  // Every PR here has to clear the `commits` job, so the subject is not
+  // Renovate's to choose freely: a conventional type, a lower-case scope, and
+  // 72 characters. 'chore(deps): ' spends 13 of them, which leaves room for
+  // every topic the rules below can generate.
+  semanticCommits: 'enabled',
+  semanticCommitType: 'chore',
+  semanticCommitScope: 'deps',
+
+  // go.sum has to move with go.mod. Without this a bump lands a PR that fails
+  // the build over a checksum, which reads as a broken update rather than an
+  // incomplete one.
+  postUpdateOptions: ['gomodTidy'],
+
+  // A compromised or broken release is usually yanked within a day or two.
+  // Nothing in this repository needs an upstream the same week it ships, so
+  // the wait costs nothing and skips the window where it would matter.
+  minimumReleaseAge: '3 days',
+
+  // The dependency count is the point of the project, not an accident. If this
+  // limit is ever the binding constraint, something has gone wrong upstream of
+  // Renovate.
+  prConcurrentLimit: 3,
+
+  packageRules: [
+    {
+      description: 'One PR a week for everything that is not a major bump. \
+Majors are excluded rather than merely unlisted: BurntSushi/toml parses every \
+credential this hub holds, and a breaking change to it arriving inside a \
+batch called "non-major" is one that gets skimmed instead of read.',
+      matchUpdateTypes: ['minor', 'patch', 'digest'],
+      groupName: 'all non-major dependencies',
+    },
+    {
+      description: 'The go directive is the floor a builder has to meet, not \
+a dependency — raising it is a decision about who can still build this, so it \
+arrives alone and never grouped. Merging it means editing the README, which \
+states the same floor in prose; CI follows on its own because the workflow \
+reads go-version-file.',
+      matchDatasources: ['golang-version'],
+      groupName: 'go toolchain',
+      commitMessageTopic: 'the go directive',
+      addLabels: ['needs-readme-edit'],
+    },
+  ],
+}
