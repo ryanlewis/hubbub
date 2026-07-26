@@ -33,9 +33,9 @@ database, no runtime to install, no build chain.
 
 Early. The core vertical works end to end — authenticated notify, the outbox,
 the ntfy and smtp adapters, the full response contract, metrics, the dead-man
-heartbeat, the served OpenAPI spec — and is covered by tests. Not yet built: the
-`exec` and Discord adapters, bare-URL webhooks, and the admin UI. See
-[Roadmap](#roadmap).
+heartbeat, the served OpenAPI spec and the `/admin` dashboard — and is covered
+by tests. Not yet built: the `exec` and Discord adapters, bare-URL webhooks,
+per-key rate caps and `/v1/recent`. See [Roadmap](#roadmap).
 
 Expect breaking changes to config shapes before a tagged release.
 
