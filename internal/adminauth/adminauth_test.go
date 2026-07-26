@@ -29,7 +29,7 @@ func req(headers map[string]string) *http.Request {
 }
 
 func TestAnonymousIsRedirectedToLogin(t *testing.T) {
-	g := guard(t, "ryan@rlew.io")
+	g := guard(t, "ops@example.com")
 	rec := httptest.NewRecorder()
 	g.Protect(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Error("the protected handler ran for an anonymous request")
@@ -48,11 +48,11 @@ func TestAnonymousIsRedirectedToLogin(t *testing.T) {
 }
 
 func TestAllowlistedIdentityPasses(t *testing.T) {
-	g := guard(t, "ryan@rlew.io")
+	g := guard(t, "ops@example.com")
 	rec := httptest.NewRecorder()
 	ran := false
 	g.Protect(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { ran = true })).
-		ServeHTTP(rec, req(map[string]string{headerEmail: "ryan@rlew.io", headerUserID: "usr1"}))
+		ServeHTTP(rec, req(map[string]string{headerEmail: "ops@example.com", headerUserID: "usr1"}))
 
 	if !ran {
 		t.Error("the protected handler did not run")
@@ -65,7 +65,7 @@ func TestAllowlistedIdentityPasses(t *testing.T) {
 // Being logged in as the wrong one of your own accounts is the overwhelmingly
 // likely cause of a refusal, and a bare 403 makes that invisible.
 func TestRefusedIdentityIsNamed(t *testing.T) {
-	g := guard(t, "ryan@rlew.io")
+	g := guard(t, "ops@example.com")
 	rec := httptest.NewRecorder()
 	g.Protect(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Error("the protected handler ran for a non-allowlisted identity")
@@ -80,13 +80,13 @@ func TestRefusedIdentityIsNamed(t *testing.T) {
 }
 
 func TestMatchingIsCaseInsensitiveAndTrimmed(t *testing.T) {
-	g := guard(t, "  Ryan@RLew.IO  ")
-	for _, addr := range []string{"ryan@rlew.io", "RYAN@RLEW.IO", " ryan@rlew.io "} {
+	g := guard(t, "  Ops@Example.COM  ")
+	for _, addr := range []string{"ops@example.com", "OPS@EXAMPLE.COM", " ops@example.com "} {
 		if !g.Permits(addr) {
 			t.Errorf("Permits(%q) = false, want true", addr)
 		}
 	}
-	for _, addr := range []string{"", "ryanrlew.io", "ryan@rlew.io.evil.com", "evil@example.com"} {
+	for _, addr := range []string{"", "opsexample.com", "ops@example.com.evil.com", "evil@example.com"} {
 		if g.Permits(addr) {
 			t.Errorf("Permits(%q) = true, want false", addr)
 		}
@@ -172,7 +172,7 @@ func TestProviderStatesItsDeploymentAssumption(t *testing.T) {
 }
 
 func TestGuardDistinguishesAnonymousFromRefused(t *testing.T) {
-	g := guard(t, "ryan@rlew.io")
+	g := guard(t, "ops@example.com")
 
 	if _, auth, perm := g.Identity(req(nil)); auth || perm {
 		t.Errorf("anonymous: authenticated=%v permitted=%v, want false/false", auth, perm)
@@ -180,7 +180,7 @@ func TestGuardDistinguishesAnonymousFromRefused(t *testing.T) {
 	if _, auth, perm := g.Identity(req(map[string]string{headerEmail: "x@y.z"})); !auth || perm {
 		t.Errorf("refused: authenticated=%v permitted=%v, want true/false", auth, perm)
 	}
-	if _, auth, perm := g.Identity(req(map[string]string{headerEmail: "ryan@rlew.io"})); !auth || !perm {
+	if _, auth, perm := g.Identity(req(map[string]string{headerEmail: "ops@example.com"})); !auth || !perm {
 		t.Errorf("allowed: authenticated=%v permitted=%v, want true/true", auth, perm)
 	}
 }

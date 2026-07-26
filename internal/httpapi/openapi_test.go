@@ -294,7 +294,7 @@ func TestOpenAPIPriorityEnumMatchesTheParser(t *testing.T) {
 func TestOpenAPIDocumentsEveryStatusTheHandlerReturns(t *testing.T) {
 	cases := []struct {
 		name     string
-		upstream int    // status the fake ntfy returns
+		upstream int // status the fake ntfy returns
 		key      string
 		body     string
 		rateCap  int // >0 installs a limiter this small
@@ -420,16 +420,16 @@ func TestOpenAPIServerURLReflectsHowItWasReached(t *testing.T) {
 	// https-only deployment.
 	if got := serverURL(map[string]string{
 		"X-Forwarded-Proto": "https",
-		"X-Forwarded-Host":  "notify.exe.xyz",
-	}); got != "https://notify.exe.xyz" {
+		"X-Forwarded-Host":  "hub.example.com",
+	}); got != "https://hub.example.com" {
 		t.Errorf("proxied server url = %q", got)
 	}
 
 	// Proxies append rather than replace, so the chain can be several deep.
 	if got := serverURL(map[string]string{
 		"X-Forwarded-Proto": "https, http",
-		"X-Forwarded-Host":  "notify.exe.xyz, internal:8080",
-	}); got != "https://notify.exe.xyz" {
+		"X-Forwarded-Host":  "hub.example.com, internal:8080",
+	}); got != "https://hub.example.com" {
 		t.Errorf("chained forwarded headers = %q", got)
 	}
 

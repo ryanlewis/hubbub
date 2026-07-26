@@ -16,7 +16,7 @@ import (
 	"github.com/ryanlewis/hubbub/internal/dlog"
 )
 
-const adminEmail = "ryan@rlew.io"
+const adminEmail = "ops@example.com"
 
 // adminServer wires the dashboard over real files on disk, because every
 // interesting property here is about what ends up in those files.

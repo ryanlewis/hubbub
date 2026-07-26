@@ -166,9 +166,9 @@ func TestLandingShowsTheHostItWasReachedOn(t *testing.T) {
 	for _, path := range []string{"/", "/llms.txt"} {
 		body := fetch(t, s, path, map[string]string{
 			"X-Forwarded-Proto": "https",
-			"X-Forwarded-Host":  "notify.exe.xyz",
+			"X-Forwarded-Host":  "hub.example.com",
 		}).Body.String()
-		if !strings.Contains(body, "https://notify.exe.xyz/v1/notify") {
+		if !strings.Contains(body, "https://hub.example.com/v1/notify") {
 			t.Errorf("GET %s does not show the proxied base URL", path)
 		}
 

@@ -198,9 +198,9 @@ func TestDocsShowsTheHostItWasReachedOn(t *testing.T) {
 	s := landingServer(t)
 	body := docsBody(t, s, map[string]string{
 		"X-Forwarded-Proto": "https",
-		"X-Forwarded-Host":  "notify.exe.xyz",
+		"X-Forwarded-Host":  "hub.example.com",
 	})
-	if !strings.Contains(body, "https://notify.exe.xyz") {
+	if !strings.Contains(body, "https://hub.example.com") {
 		t.Error("the page does not name the base URL it was reached on")
 	}
 }
