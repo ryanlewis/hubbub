@@ -643,6 +643,13 @@ you bolt it on with a reverse proxy, with no per-key issue and revoke.
 hubbub's first adapter. [Novu](https://novu.co/) is real notification
 infrastructure and considerably more than a personal hub needs.
 
+## Security
+
+[SECURITY.md](SECURITY.md) is where to report a vulnerability, and it also
+states the four things a deployment has to provide that hubbub cannot enforce
+for itself — TLS in front, an unreachable ops port, a proxy that strips its own
+identity headers, and config files only the service user can read.
+
 ## Licence
 
 [MIT](LICENSE).
