@@ -547,6 +547,11 @@ GOOS=linux GOARCH=amd64 go build -o hubbub .
 Checklist for a real deployment:
 
 - A supervisor (systemd unit) with restart-on-failure and start-on-boot
+- If `[admin]` is enabled, a config **directory** the service may write to. The
+  dashboard saves by writing a temp file next to the real one and renaming, so
+  write permission on the files alone is not enough. Sandboxing is the usual
+  thing in the way: under systemd's `ProtectSystem=strict` every save fails with
+  *read-only file system* until the directory is named in `ReadWritePaths=`
 - `logrotate` for the delivery log
 - The ops port bound somewhere the internet cannot reach
 - A dead-man's-switch ping target configured
