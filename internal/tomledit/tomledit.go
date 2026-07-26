@@ -492,7 +492,8 @@ func SetKeyInBlock(src []byte, id, key, value string) ([]byte, error) {
 	body := src[start:end]
 	assign := key + " = " + value
 
-	for _, l := range scan(body) {
+	lines := scan(body)
+	for i, l := range lines {
 		if !l.structural || l.kind != kindOther {
 			continue
 		}
@@ -500,12 +501,18 @@ func SetKeyInBlock(src []byte, id, key, value string) ([]byte, error) {
 		if !ok || name != key {
 			continue
 		}
+		// The whole value, not just its first line: a hand-written
+		// `key = [` array spread over several lines would otherwise keep its
+		// continuation lines and its closing bracket, and the result would not
+		// parse — a rotate or revoke on such a caller failed with a TOML error
+		// nobody could act on.
+		valueEnd := logicalEnd(lines, i)
 		// Keep whatever terminator the line already had.
 		repl := []byte(assign)
-		if bytes.HasSuffix(body[l.start:l.end], []byte("\n")) {
+		if bytes.HasSuffix(body[l.start:valueEnd], []byte("\n")) {
 			repl = append(repl, []byte(eol)...)
 		}
-		return splice(src, start+l.start, start+l.end, repl), nil
+		return splice(src, start+l.start, start+valueEnd, repl), nil
 	}
 
 	// Absent: insert at the top of the body, where a reader looks first.
@@ -516,8 +523,24 @@ func SetKeyInBlock(src []byte, id, key, value string) ([]byte, error) {
 type KeyLine struct {
 	Name  string
 	Value string // the raw TOML value text, trailing comment included
-	Start int    // byte offset of the line within the body
-	End   int    // byte offset just past the line's newline
+	Start int    // byte offset of the assignment within the body
+	End   int    // byte offset just past the assignment's last newline
+}
+
+// logicalEnd extends a structural line's span over the continuation lines of a
+// value that does not fit on one line — a multi-line string, or an array with
+// its elements one per line. Those lines are not structural, and the assignment
+// they belong to is not finished until they are done.
+//
+// Spans have to cover the whole value or a caller that rewrites one will leave
+// the tail of the old value behind. For the dashboard's masking that tail is a
+// credential it just claimed to have hidden.
+func logicalEnd(lines []line, i int) int {
+	end := lines[i].end
+	for j := i + 1; j < len(lines) && !lines[j].structural; j++ {
+		end = lines[j].end
+	}
+	return end
 }
 
 // KeyLines lists the structural assignments in a block body.
@@ -529,21 +552,24 @@ type KeyLine struct {
 // line is a leaked password and a false positive is a corrupted script body.
 func KeyLines(body []byte) []KeyLine {
 	var out []KeyLine
-	for _, l := range scan(body) {
+	lines := scan(body)
+	for i, l := range lines {
 		if !l.structural || l.kind != kindOther {
 			continue
 		}
-		raw := body[l.start:l.end]
-		name, ok := keyOf(raw)
+		name, ok := keyOf(body[l.start:l.end])
 		if !ok {
 			continue
 		}
-		_, rhs, _ := bytes.Cut(raw, []byte("="))
+		// The span covers the whole value, however many lines it takes — see
+		// logicalEnd. keyOf already proved the first '=' in it is the assignment.
+		end := logicalEnd(lines, i)
+		_, rhs, _ := bytes.Cut(body[l.start:end], []byte("="))
 		out = append(out, KeyLine{
 			Name:  name,
 			Value: string(bytes.Trim(rhs, " \t\r\n")),
 			Start: l.start,
-			End:   l.end,
+			End:   end,
 		})
 	}
 	return out

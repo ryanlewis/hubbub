@@ -278,6 +278,15 @@ func (s *Server) handleCallerCreate(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(r.FormValue("id"))
 	etag := r.FormValue("etag")
 
+	// Before interpolation, not after. The id goes into a `[<id>]` header as raw
+	// text, so one carrying a newline splices a whole second caller table —
+	// with a key of the submitter's choosing — into a file that then parses
+	// perfectly and audits as a single create.
+	if err := config.ValidCallerID(id); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+
 	key := newKey()
 	_, err := s.Admin.Keys.Apply(etag, func(src []byte) ([]byte, error) {
 		if slices.Contains(tomledit.IDs(src), id) {

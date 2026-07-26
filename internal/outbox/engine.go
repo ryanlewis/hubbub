@@ -293,10 +293,30 @@ func (e *Engine) expireSpool(id string) {
 		}
 		return
 	}
-	var expired int
+	var expired, corrupt int
 	for _, name := range names {
 		it, err := sp.load(name)
-		if err != nil || time.Since(it.EnqueuedAt) <= e.opts.TTL {
+		if err != nil {
+			if !errors.Is(err, errCorrupt) {
+				// Transient read failure — leave the message on disk, exactly as
+				// the worker would.
+				continue
+			}
+			// Corrupt is the one load failure where deleting is right, and this
+			// sweep is the only thing that will ever apply that rule here: the
+			// worker that would have is stopped, which is why the sweep exists.
+			// Skipping it would leave the file queued forever with its 202 never
+			// settled.
+			slog.Error("spool item corrupt in disabled channel; dropping",
+				"channel", id, "file", name, "err", err)
+			if claimed, err := sp.claim(name); err != nil || !claimed {
+				continue
+			}
+			corrupt++
+			e.settle(id, requestIDFromName(name), "", "dropped: corrupt", "corrupt")
+			continue
+		}
+		if time.Since(it.EnqueuedAt) <= e.opts.TTL {
 			continue
 		}
 		if claimed, err := sp.claim(name); err != nil || !claimed {
@@ -305,8 +325,8 @@ func (e *Engine) expireSpool(id string) {
 		expired++
 		e.settle(id, it.Notification.RequestID, it.Notification.CallerID, "dropped: expired", "expired")
 	}
-	if expired > 0 {
-		slog.Info("disabled channel backlog expired", "channel", id, "messages", expired)
+	if expired > 0 || corrupt > 0 {
+		slog.Info("disabled channel backlog swept", "channel", id, "expired", expired, "corrupt", corrupt)
 	}
 }
 

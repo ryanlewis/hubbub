@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -111,10 +113,31 @@ type notifyRequest struct {
 	HTML     string   `json:"html"`
 	Priority string   `json:"priority"`
 	Tags     []string `json:"tags"`
-	// Pointer so an omitted list is distinguishable from an explicit empty
-	// one: the first means "the key's full permission set", the second is a
-	// caller that computed no targets and must not fan out to everything.
-	Channels *[]string `json:"channels"`
+	// Raw so that all three inputs stay distinguishable: an omitted list means
+	// "the key's full permission set", while an explicit `[]` — or a `null` from
+	// a caller whose target list came back empty — is a caller that computed no
+	// targets and must not fan out to everything. A *[]string cannot tell null
+	// from absent: encoding/json sets the pointer to nil for both.
+	Channels json.RawMessage `json:"channels"`
+}
+
+// selection reads the channels field: whether it was present, and what it
+// named. A present-but-unusable value is an error rather than a silent
+// fall-through to the key's whole delivery set — widening is the one direction
+// this field must never move in.
+func (r *notifyRequest) selection() (present bool, channels []string, err error) {
+	if len(r.Channels) == 0 {
+		return false, nil, nil
+	}
+	if err := json.Unmarshal(r.Channels, &channels); err != nil {
+		return true, nil, fmt.Errorf("channels must be an array of channel names: %v", err)
+	}
+	// `null` unmarshals into a nil slice without complaint, which would look
+	// exactly like the field being absent.
+	if channels == nil {
+		return true, nil, errors.New("channels was null: omit the field to use the key's full permission list")
+	}
+	return true, channels, nil
 }
 
 type notifyResponse struct {
@@ -142,7 +165,10 @@ func (s *Server) handleNotify(w http.ResponseWriter, r *http.Request) {
 	// 2. Global rate cap: after auth, before enqueue. Capped requests are
 	// logged — they're the runaway evidence.
 	if allowed, retryAfter := s.Rate.Allow(time.Now()); !allowed {
-		w.Header().Set("Retry-After", fmt.Sprintf("%d", int(retryAfter.Seconds()+0.5)))
+		// Rounded up, never to nearest: with 1.4s left on the window, a
+		// "Retry-After: 1" sends a compliant script straight into another 429,
+		// and anything under half a second would round to an immediate retry.
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", int(math.Ceil(retryAfter.Seconds()))))
 		s.Metrics.Request("rate_capped")
 		s.Log.Append(dlog.Record{
 			Kind:     "request",
@@ -172,23 +198,29 @@ func (s *Server) handleNotify(w http.ResponseWriter, r *http.Request) {
 	// an explicit channels list narrows, never widens — naming a channel the
 	// key lacks is a 403, not a silent intersection.
 	targets := caller.Channels
-	if req.Channels != nil {
+	present, selected, err := req.selection()
+	if err != nil {
+		s.Metrics.Request("rejected")
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if present {
 		// An explicit `"channels": []` is the one input that could widen:
 		// treating it as "field absent" fans a caller that computed no targets
 		// out to every channel its key permits. Reject it instead.
-		if len(*req.Channels) == 0 {
+		if len(selected) == 0 {
 			s.Metrics.Request("rejected")
 			writeError(w, http.StatusBadRequest, "channels was empty: omit the field to use the key's full permission list")
 			return
 		}
-		for _, ch := range *req.Channels {
+		for _, ch := range selected {
 			if !caller.Permitted(ch) {
 				s.Metrics.Request("forbidden")
 				writeError(w, http.StatusForbidden, fmt.Sprintf("channel %q not permitted for this key", ch))
 				return
 			}
 		}
-		targets = *req.Channels
+		targets = selected
 	}
 	if len(targets) == 0 {
 		s.Metrics.Request("rejected")
@@ -410,7 +442,11 @@ func decodeNotify(w http.ResponseWriter, r *http.Request) (*notifyRequest, error
 		}
 		return nil, fmt.Errorf("invalid request: %v", err)
 	}
-	if dec.More() {
+	// A second decode is the trailing-data check, not dec.More(): More reports
+	// whether another *value* follows, and a stray `}` or `]` is not the start of
+	// one — `{"title":"a","message":"b"}}` sails through it. Anything but EOF here
+	// means the caller sent something it did not mean to.
+	if err := dec.Decode(new(json.RawMessage)); !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("invalid request: trailing data after JSON object")
 	}
 	return &req, nil

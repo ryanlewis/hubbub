@@ -325,6 +325,34 @@ func TestCreateCallerShowsKeyOnceThenOnlyAPrefix(t *testing.T) {
 	}
 }
 
+// The id is interpolated into a `[<id>]` header as raw text, so it has to be
+// validated before it gets there: a newline splices in a whole second caller
+// table — with a key the submitter chose — and the result parses perfectly and
+// audits as one create.
+func TestCreateCallerRejectsUnsafeIDs(t *testing.T) {
+	s, keysPath, _ := adminServer(t)
+	before := read(t, keysPath)
+
+	injection := "evil]\nkey = \"nh_attacker_chosen_key_0123456789\"\nchannels = [\"ntfy\"]\n[decoy"
+	for _, id := range []string{injection, "ops.team", "a b", "", strings.Repeat("x", 65)} {
+		k, _ := etags(t, s)
+		rec := adminPost(t, s, "/admin/callers", adminEmail, url.Values{"etag": {k}, "id": {id}})
+		if rec.Code == http.StatusOK {
+			t.Errorf("id %q was accepted", id)
+		}
+	}
+	if read(t, keysPath) != before {
+		t.Error("keys.toml changed despite refused creates")
+	}
+	ring, err := config.ParseKeys([]byte(read(t, keysPath)), "k")
+	if err != nil {
+		t.Fatalf("keys.toml no longer loads: %v", err)
+	}
+	if _, ok := ring.Lookup("nh_attacker_chosen_key_0123456789"); ok {
+		t.Error("an injected key authenticates")
+	}
+}
+
 func TestCreateCallerPreservesComments(t *testing.T) {
 	s, keysPath, _ := adminServer(t)
 	k, _ := etags(t, s)
@@ -514,6 +542,59 @@ func TestSettingsEditorMasksSecretsAndKeepsThemOnSave(t *testing.T) {
 	// A textarea always submits CRLF; an LF file must stay LF.
 	if strings.Contains(after, "\r") {
 		t.Error("CRLF from the form leaked into an LF file")
+	}
+}
+
+// TOML spells a string four ways and only one of them was masked. A literal
+// 'single-quoted' secret went to the browser verbatim; a """ multi-line one was
+// worse — the opening delimiter looked maskable, so the first line was replaced
+// and the secret's own lines were left behind, both leaking it and leaving a body
+// that no longer parsed.
+func TestSettingsEditorMasksEveryStringForm(t *testing.T) {
+	for _, tc := range []struct {
+		name, assignment, secret string
+	}{
+		{"literal", "token = 'literal-s3cret'", "literal-s3cret"},
+		{"multiline", "token = \"\"\"\nmultiline-s3cret\n\"\"\"", "multiline-s3cret"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, _, chansPath := adminServer(t)
+			body := "# Channel instances.\n\n[ntfy]\ntype = \"ntfy\"\nserver = \"http://127.0.0.1:1\"\ntopic = \"tst\"\n" +
+				tc.assignment + "\n\n# Trailing documentation.\n"
+			if err := os.WriteFile(chansPath, []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			page := adminGet(t, s, "/admin?edit=ntfy", adminEmail).Body.String()
+			if strings.Contains(page, tc.secret) {
+				t.Errorf("the settings editor rendered a live credential")
+			}
+			if !strings.Contains(page, "••••••••") {
+				t.Error("the credential was not masked")
+			}
+
+			// And the mask still means "keep what's on disk" on the way back.
+			_, c := etags(t, s)
+			submitted := "type = \"ntfy\"\r\nserver = \"http://127.0.0.1:1\"\r\ntopic = \"changed\"\r\ntoken = \"••••••••\"\r\n"
+			rec := adminPost(t, s, "/admin/channels/ntfy/settings", adminEmail,
+				url.Values{"etag": {c}, "body": {submitted}, "confirm": {"1"}})
+			if rec.Code != http.StatusOK {
+				t.Fatalf("save: %d %s", rec.Code, rec.Body.String())
+			}
+			after := read(t, chansPath)
+			if !strings.Contains(after, tc.secret) {
+				t.Errorf("the masked credential was not preserved:\n%s", after)
+			}
+			if !strings.Contains(after, `topic = "changed"`) {
+				t.Errorf("the edit did not land:\n%s", after)
+			}
+			if _, err := config.ParseChannels([]byte(after), "c"); err != nil {
+				t.Errorf("channels.toml no longer loads: %v\n%s", err, after)
+			}
+			if !strings.Contains(after, "# Trailing documentation.") {
+				t.Errorf("the save ate a comment:\n%s", after)
+			}
+		})
 	}
 }
 

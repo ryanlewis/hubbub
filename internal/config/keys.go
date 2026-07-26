@@ -69,7 +69,7 @@ const minKeyLen = 16 // bytes of the string; issued keys are ≥16 bytes of entr
 // maxCallerIDLen matches the channel-id cap; the id is a label, not a payload.
 const maxCallerIDLen = 64
 
-// validCallerID rejects any id that isn't a bare token.
+// ValidCallerID rejects any id that isn't a bare token.
 //
 // TOML would happily accept ["ops.team"], but a dotted id is indistinguishable
 // at a glance from [ops.team] — a sub-table, an entirely different thing — and
@@ -77,7 +77,13 @@ const maxCallerIDLen = 64
 // source text. Constraining ids here means that ambiguity can never arise.
 // The id also lands in every delivery-log line, so keeping it to plain
 // characters is worth something on its own.
-func validCallerID(id string) error {
+//
+// Exported because the dashboard writes `[<id>]` into keys.toml by string
+// interpolation, so it has to be able to ask this question *before* the file is
+// parsed — a caller id carrying a newline would otherwise splice a whole second
+// table, with a key of the submitter's choosing, into a file that then parses
+// perfectly.
+func ValidCallerID(id string) error {
 	switch {
 	case id == "":
 		return fmt.Errorf("caller id must not be empty")
@@ -123,7 +129,7 @@ func ParseKeys(src []byte, name string) (*Keyring, error) {
 
 	ring := &Keyring{byKey: make(map[string]*Caller)}
 	for id, e := range entries {
-		if err := validCallerID(id); err != nil {
+		if err := ValidCallerID(id); err != nil {
 			return nil, fmt.Errorf("%s: caller %q: %w", name, id, err)
 		}
 		if len(e.Key) == 0 && len(e.URLToken) == 0 {

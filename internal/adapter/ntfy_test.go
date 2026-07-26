@@ -96,6 +96,38 @@ func TestNtfyClassification(t *testing.T) {
 	}
 }
 
+// Go's default redirect policy turns a 301 into a GET and drops the body, so a
+// followed redirect publishes nothing and hands back the landing page's 200 —
+// which the adapter would report as delivered. Silent loss, with a success line
+// in the delivery log.
+func TestNtfyRefusesToFollowARedirect(t *testing.T) {
+	var landed bool
+	final := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		landed = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer final.Close()
+	redirector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, final.URL, http.StatusMovedPermanently)
+	}))
+	defer redirector.Close()
+
+	err := ntfyFor(t, redirector.URL).Send(context.Background(), note())
+	se, ok := err.(*SendError)
+	if !ok {
+		t.Fatalf("err = %v, want a *SendError — a redirect must never read as success", err)
+	}
+	if se.Kind != KindPermanent {
+		t.Errorf("kind = %v, want KindPermanent: a redirecting server= is a config error, not a blip", se.Kind)
+	}
+	if !strings.Contains(se.Reason, "server=") {
+		t.Errorf("reason = %q, want it to say what to fix", se.Reason)
+	}
+	if landed {
+		t.Error("the publish was forwarded to the redirect target")
+	}
+}
+
 func TestNtfyTruncatesLongMessage(t *testing.T) {
 	var got map[string]any
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

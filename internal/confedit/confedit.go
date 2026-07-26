@@ -101,52 +101,86 @@ func (f *File) Apply(etag string, edit Edit) ([]byte, error) {
 	if err := f.Validate(out, "your edit"); err != nil {
 		return nil, err
 	}
-	if err := writeDurable(f.Path, out); err != nil {
+
+	tmp, err := stage(f.Path, out)
+	if err != nil {
+		return nil, err
+	}
+	// Removed on every failure path below; the successful rename makes it a no-op.
+	defer os.Remove(tmp)
+
+	// Last look before the rename commits. Everything since the check above —
+	// the transform, the loader's validation, a write and two fsyncs — is
+	// milliseconds of wall clock during which an operator's SSH edit can land,
+	// and the rename would silently overwrite it. README promises the hand-edit
+	// wins, so the check goes as late as it can go.
+	//
+	// This narrows the window to a single rename; it does not close it. Closing
+	// it needs a lock file both this process and a human's $EDITOR respect,
+	// which is a bigger contract than the failure it prevents.
+	if _, latest, err := f.Read(); err != nil {
+		return nil, err
+	} else if etag != "" && latest != cur {
+		return nil, ErrConflict
+	}
+	if err := commit(tmp, f.Path); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// writeDurable replaces a file's contents atomically *and* durably.
+// stage writes the new contents to a temp file beside the real one and flushes
+// them, returning the temp path for commit to rename into place.
 //
-// Rename alone gives atomicity: a reader sees the old bytes or the new ones,
-// never a mix. It does not give durability — after a power loss the rename can
-// be visible while the data blocks are not, which for keys.toml means a
-// zero-length file and every caller suddenly unauthenticated. Hence the two
-// syncs: one for the data, one for the directory entry that points at it.
-func writeDurable(path string, data []byte) error {
+// Split from commit so the caller can take one more look at the file it is about
+// to replace: everything expensive happens here, and the rename that cannot be
+// undone happens there.
+//
+// The sync is what makes this durable rather than merely atomic. Rename alone
+// means a reader sees the old bytes or the new ones, never a mix — but after a
+// power loss the rename can be visible while the data blocks are not, which for
+// keys.toml means a zero-length file and every caller suddenly unauthenticated.
+func stage(path string, data []byte) (string, error) {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, tempPrefix+"*")
 	if err != nil {
-		return err
+		return "", err
 	}
 	name := tmp.Name()
-	// Removed on every failure path; the successful rename makes this a no-op.
-	defer os.Remove(name)
+	fail := func(err error) (string, error) {
+		tmp.Close()
+		os.Remove(name)
+		return "", err
+	}
 
 	// Inherit the real file's mode rather than trusting CreateTemp's 0600 to
 	// match: these files carry credentials and the mode is part of that.
 	if fi, err := os.Stat(path); err == nil {
 		if err := tmp.Chmod(fi.Mode().Perm()); err != nil {
-			tmp.Close()
-			return err
+			return fail(err)
 		}
 	}
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
+		return fail(err)
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
+		return fail(err)
 	}
 	if err := tmp.Close(); err != nil {
+		os.Remove(name)
+		return "", err
+	}
+	return name, nil
+}
+
+// commit renames a staged file over the real one and flushes the directory
+// entry that now points at it — the second half of the durability the two syncs
+// exist for.
+func commit(tmp, path string) error {
+	if err := os.Rename(tmp, path); err != nil {
 		return err
 	}
-	if err := os.Rename(name, path); err != nil {
-		return err
-	}
-	return syncDir(dir)
+	return syncDir(filepath.Dir(path))
 }
 
 func syncDir(dir string) error {

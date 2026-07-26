@@ -74,7 +74,13 @@ type oaSchema struct {
 	// Pointers so a zero-valued limit is distinguishable from an absent one —
 	// "≤ 0 bytes" on every unconstrained field would be worse than no column.
 	MinLength *int `json:"minLength"`
-	MaxLength *int `json:"maxLength"`
 	MinItems  *int `json:"minItems"`
 	MaxItems  *int `json:"maxItems"`
+	// MaxBytes is an extension, not JSON Schema's maxLength, because every cap
+	// this server enforces is a *byte* cap (len on the Go string) and maxLength
+	// counts characters. Published as maxLength, a 256-emoji title validated
+	// clean in a generated client and came back 400 from the server — roughly a
+	// kilobyte of UTF-8. An x- keyword is ignored by validators instead of
+	// asserting something untrue, and the prose still states the real limit.
+	MaxBytes *int `json:"x-max-bytes"`
 }

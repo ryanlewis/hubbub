@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func write(t *testing.T, path, content string) {
@@ -258,10 +259,8 @@ func TestReloadRetriedAfterTransientFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Revoke the leaked key, then make the read fail. chmod moves ctime, not
-	// mtime, so the poll still sees exactly one content change.
+	// Revoke the leaked key, then make the read fail.
 	write(t, keys, "[b]\nkey = \"nh_bbbbbbbbbbbbbbbb\"\nchannels = [\"ntfy\"]\n")
-	store.keysMtime = mtime(keys).Add(-1) // force change detection
 	if err := os.Chmod(keys, 0o000); err != nil {
 		t.Fatal(err)
 	}
@@ -282,6 +281,50 @@ func TestReloadRetriedAfterTransientFailure(t *testing.T) {
 	}
 }
 
+// Two writes can share one filesystem timestamp — the dashboard saving twice in
+// a second — and an editor can put an mtime back deliberately. An mtime-gated
+// poll misses those *permanently*, because it compares against the last loaded
+// state: no later poll sees a difference either, so the second revocation never
+// takes effect.
+func TestStoreReloadsWhenTheTimestampDoesNotMove(t *testing.T) {
+	dir := t.TempDir()
+	keys := filepath.Join(dir, "keys.toml")
+	chans := filepath.Join(dir, "channels.toml")
+	write(t, keys, "[a]\nkey = \"nh_aaaaaaaaaaaaaaaa\"\nchannels = [\"ntfy\"]\n")
+	write(t, chans, "[ntfy]\ntype = \"ntfy\"\ntopic = \"x\"\n")
+
+	store, err := NewStore(&Config{KeysFile: keys, ChannelsFile: chans})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stamp := mtimeOf(t, keys)
+
+	write(t, keys, "[a]\nkey = \"nh_ccccccccccccccccc\"\nchannels = [\"ntfy\"]\n")
+	if err := os.Chtimes(keys, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	if got := mtimeOf(t, keys); !got.Equal(stamp) {
+		t.Fatalf("could not hold the mtime still (%v vs %v)", got, stamp)
+	}
+
+	store.pollOnce()
+	if _, ok := store.Keyring().Lookup("nh_ccccccccccccccccc"); !ok {
+		t.Error("the new key never loaded: a change with an unmoved mtime was missed")
+	}
+	if _, ok := store.Keyring().Lookup("nh_aaaaaaaaaaaaaaaa"); ok {
+		t.Error("the revoked key still authenticates")
+	}
+}
+
+func mtimeOf(t *testing.T, path string) time.Time {
+	t.Helper()
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fi.ModTime()
+}
+
 func TestStoreValidateBeforeSwap(t *testing.T) {
 	dir := t.TempDir()
 	keys := filepath.Join(dir, "keys.toml")
@@ -296,7 +339,6 @@ func TestStoreValidateBeforeSwap(t *testing.T) {
 
 	// Break the keys file: a half-written hand-edit must NOT blank creds.
 	write(t, keys, "[a]\nkey = \"nh_aaaaaaaa") // truncated mid-string
-	store.keysMtime = mtime(keys).Add(-1)      // force change detection
 	store.pollOnce()
 	if _, ok := store.Keyring().Lookup("nh_aaaaaaaaaaaaaaaa"); !ok {
 		t.Error("broken keys file must keep the previous keyring")
@@ -304,7 +346,6 @@ func TestStoreValidateBeforeSwap(t *testing.T) {
 
 	// Fix it with a new caller: swap should now happen.
 	write(t, keys, "[b]\nkey = \"nh_bbbbbbbbbbbbbbbb\"\nchannels = []\n")
-	store.keysMtime = mtime(keys).Add(-1)
 	store.pollOnce()
 	if _, ok := store.Keyring().Lookup("nh_bbbbbbbbbbbbbbbb"); !ok {
 		t.Error("valid keys file must swap in")

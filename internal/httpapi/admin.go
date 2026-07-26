@@ -249,20 +249,32 @@ func prefixOf(key string) string {
 // --- masking ----------------------------------------------------------------
 
 // maskSecrets replaces credential values with a sentinel for display.
-// Only quoted values are masked: a non-string setting is not a password, and
+// Only string values are masked: a non-string setting is not a password, and
 // replacing one would produce a body that no longer type-checks.
 func maskSecrets(body []byte) []byte {
 	out := make([]byte, 0, len(body))
 	last := 0
 	for _, k := range tomledit.KeyLines(body) {
-		if !secretish(k.Name) || !strings.HasPrefix(k.Value, `"`) || k.Value == maskedSecret {
+		if !secretish(k.Name) || !quotedValue(k.Value) || k.Value == maskedSecret {
 			continue
 		}
+		// k.End covers the whole assignment, so a value written across several
+		// lines collapses to this one masked line. Replacing only its first line
+		// would leave the rest of the secret in the textarea *and* leave behind a
+		// dangling `"""` that no longer parses.
 		out = append(out, body[last:k.Start]...)
 		out = append(out, []byte(k.Name+" = "+maskedSecret+"\n")...)
 		last = k.End
 	}
 	return append(out, body[last:]...)
+}
+
+// quotedValue reports whether a raw TOML value is a string in any of the four
+// spellings. Matching only `"` left `password = 'app-secret'` in the DOM, and
+// counted a `"""` multi-line secret as maskable when only its opening delimiter
+// was on the line being replaced.
+func quotedValue(raw string) bool {
+	return strings.HasPrefix(raw, `"`) || strings.HasPrefix(raw, `'`)
 }
 
 // lineMask decides what one value in a config line looks like on screen.

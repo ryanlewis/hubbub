@@ -584,6 +584,124 @@ func TestDeliveredItemThatCannotBeRemovedIsNotResent(t *testing.T) {
 	}
 }
 
+// Winning the unlink is what grants the right to settle. The engine's sweeps
+// claim items the same way a worker does, so an item that vanished from under
+// this worker has already been reported by one of them — settling it again puts
+// two contradictory terminal lines under one request id.
+func TestAnAlreadyClaimedItemIsNotSettledTwice(t *testing.T) {
+	dir := t.TempDir()
+	w, _ := newTestWorker(t, dir, &fakeAdapter{}, testOpts(dir))
+
+	if err := w.enqueue(note("r_raced"), false); err != nil {
+		t.Fatal(err)
+	}
+	names, err := w.sp.list()
+	if err != nil || len(names) != 1 {
+		t.Fatalf("list = %v, %v", names, err)
+	}
+
+	// Another settler gets there first: the disabled-channel reaper, or the purge
+	// of a channel that left the config. It owns the terminal line.
+	claimed, err := w.sp.claim(names[0])
+	if err != nil || !claimed {
+		t.Fatalf("claim = %v, %v", claimed, err)
+	}
+
+	gone := w.finish(names[0], "r_raced", "test", Outcome{Channel: "ch", Status: "ok", OK: true}, "ok")
+	if !gone {
+		t.Error("finish should report the file as gone — it is")
+	}
+	for _, r := range readLog(t, dir) {
+		if r.RequestID == "r_raced" && r.Kind == "terminal" {
+			t.Errorf("the worker settled an item it did not claim: %+v", r)
+		}
+	}
+}
+
+// A temp file from a failed write is invisible to list(), which filters on
+// .json, so nothing else would ever clean it up.
+func TestSpoolTempFileIsCleanedUpWhenTheRenameFails(t *testing.T) {
+	dir := t.TempDir()
+	spoolDir := filepath.Join(dir, "ch")
+	sp, err := newSpool(spoolDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stamp := time.Now().UTC()
+	it := &Item{Notification: note("r_blocked"), Channel: "ch", EnqueuedAt: stamp, NotBefore: stamp}
+	// A file cannot be renamed over a directory, which forces the failure path
+	// with the temp file already written and synced.
+	blocker := filepath.Join(spoolDir, fileName(it))
+	if err := os.Mkdir(blocker, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(blocker, "occupied"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := sp.put(it); err == nil {
+		t.Fatal("put should have failed: the destination is a non-empty directory")
+	}
+	entries, err := os.ReadDir(spoolDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".tmp") {
+			t.Errorf("a failed write left %s behind", e.Name())
+		}
+	}
+}
+
+// The sweep is the only thing that applies the corrupt rule to a parked
+// channel: the worker that would have is stopped, which is why the sweep
+// exists. Skipping a corrupt file leaves it queued forever with its 202 never
+// settled — while a file that merely won't read right now must still survive.
+func TestCorruptItemInADisabledChannelIsSettled(t *testing.T) {
+	dir := t.TempDir()
+	e, _ := newTestEngine(t, dir)
+
+	if err := e.SetChannels([]ChannelRuntime{{ID: "ch", Enabled: true, Adapter: &fakeAdapter{}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.SetChannels([]ChannelRuntime{{ID: "ch", Enabled: false}}); err != nil {
+		t.Fatal(err)
+	}
+	spoolDir := filepath.Join(dir, "spool", "ch")
+
+	corrupt := "1-00000000000000000001-r_rotten.json"
+	if err := os.WriteFile(filepath.Join(spoolDir, corrupt), []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	unreadable := "1-00000000000000000002-r_locked.json"
+	if err := os.WriteFile(filepath.Join(spoolDir, unreadable), []byte(`{"channel":"ch"}`), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(filepath.Join(spoolDir, unreadable), 0o600) })
+
+	e.reapDisabled()
+
+	if _, err := os.Stat(filepath.Join(spoolDir, corrupt)); !os.IsNotExist(err) {
+		t.Error("a corrupt item in a parked spool should be dropped")
+	}
+	var settled bool
+	for _, r := range readLog(t, dir) {
+		if r.RequestID == "r_rotten" && r.Outcome == "dropped: corrupt" {
+			settled = true
+		}
+	}
+	if !settled {
+		t.Error("the drop needs its terminal log line — that's where the 202 gets settled")
+	}
+	if os.Geteuid() == 0 {
+		return // root ignores file permissions
+	}
+	if _, err := os.Stat(filepath.Join(spoolDir, unreadable)); err != nil {
+		t.Error("a transient read failure must leave the message queued, not delete it")
+	}
+}
+
 func newTestEngine(t *testing.T, dir string) (*Engine, *Registry) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())

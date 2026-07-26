@@ -588,6 +588,35 @@ tls = "starttls"  # trailing comment
 	}
 }
 
+// A span that stops at the first newline lets a caller rewrite half a value and
+// leave the rest — for the dashboard's masking, the half left behind is the
+// credential it just claimed to have hidden.
+func TestKeyLinesSpanWholeValues(t *testing.T) {
+	body := []byte(`token = """
+multi-line-secret
+"""
+to = [
+  "a@b.c",
+]
+after = "plain"
+`)
+	spans := map[string]string{}
+	for _, k := range KeyLines(body) {
+		spans[k.Name] = string(body[k.Start:k.End])
+	}
+
+	want := map[string]string{
+		"token": "token = \"\"\"\nmulti-line-secret\n\"\"\"\n",
+		"to":    "to = [\n  \"a@b.c\",\n]\n",
+		"after": "after = \"plain\"\n",
+	}
+	for name, w := range want {
+		if spans[name] != w {
+			t.Errorf("span for %s = %q, want %q", name, spans[name], w)
+		}
+	}
+}
+
 // A mask that reformats the line around the value is a mask that makes a diff
 // unreadable, and a value it walks past is a credential in the DOM.
 func TestMaskStrings(t *testing.T) {

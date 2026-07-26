@@ -303,8 +303,8 @@ arbitrary markup in the operator's inbox"** when deciding who gets a key.
 
 `channels` narrows, never widens, and is not silently intersected: naming a
 channel the key lacks is a `403`, so a caller always knows its send didn't do
-what it asked. An explicit `"channels": []` is a `400` rather than a
-fall-through to the key's full list — a caller that computed no targets must
+what it asked. An explicit `"channels": []` — or `null` — is a `400` rather than
+a fall-through to the key's full list: a caller that computed no targets must
 not fan out to everything. Unknown top-level fields are rejected with `400`, so
 a caller learns its schema is stale instead of having a field quietly dropped.
 
@@ -528,6 +528,23 @@ terminal line for anything that settles later, and separate lines for auth
 failures and rate caps. It is append-only and greppable; give it a `logrotate`
 unit, since an unbounded log filling a small disk is itself a silent failure.
 
+Rotate it with **`copytruncate`**. hubbub opens the log once at startup and holds
+that descriptor, so the default rename-and-create rotation leaves it writing into
+the rotated-away file: the new `delivery.log` stays empty while terminal
+outcomes disappear into a file that the next rotation compresses or deletes.
+`copytruncate` keeps the descriptor valid.
+
+```
+/var/lib/hubbub/delivery.log {
+    weekly
+    rotate 8
+    compress
+    copytruncate
+    missingok
+    notifempty
+}
+```
+
 **The dead-man's switch**, if configured, pings an external service on a timer —
 and each tick is gated on hubbub probing its own public listener. A bare timer
 attests only that the process is alive; the self-probe makes the ping attest
@@ -561,7 +578,8 @@ Checklist for a real deployment:
   write permission on the files alone is not enough. Sandboxing is the usual
   thing in the way: under systemd's `ProtectSystem=strict` every save fails with
   *read-only file system* until the directory is named in `ReadWritePaths=`
-- `logrotate` for the delivery log
+- `logrotate` for the delivery log, with `copytruncate` — the log descriptor is
+  held open, so rename-and-create rotation silently orphans every later line
 - The ops port bound somewhere the internet cannot reach
 - A dead-man's-switch ping target configured
 - An **encrypted off-host backup of `keys.toml` and `channels.toml`** — they are

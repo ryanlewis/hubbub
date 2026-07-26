@@ -186,9 +186,11 @@ func (w *worker) next() (string, *Item, time.Duration) {
 	now := time.Now()
 	for _, name := range names {
 		// Already delivered, but the file wouldn't delete. Retry the removal;
-		// never re-send.
+		// never re-send. Gone is gone whoever unlinked it — this item was
+		// settled when it was delivered, so there is nothing left but to forget
+		// it.
 		if _, done := w.stuck[name]; done {
-			if err := w.sp.remove(name); err == nil {
+			if _, err := w.sp.claim(name); err == nil {
 				delete(w.stuck, name)
 			}
 			continue
@@ -347,9 +349,17 @@ func (w *worker) finishItem(name string, it *Item, o Outcome, metricOutcome stri
 // still on disk is a lie the next drain loop exposes by delivering it anyway.
 // Reports whether the file is actually gone.
 //
+// Winning the unlink is also what grants the right to settle. The engine's
+// sweeps — the disabled-channel reaper, the purge of a channel that left the
+// config — claim items the same way and settle whatever they win, so an item
+// that vanished from under this worker has already been reported by one of
+// them.
+//
 // Safe to call with or without w.mu held — it touches no worker state.
 func (w *worker) finish(name, reqID, callerID string, o Outcome, metricOutcome string) bool {
-	if err := w.sp.remove(name); err != nil {
+	claimed, err := w.sp.claim(name)
+	switch {
+	case err != nil:
 		slog.Error("spool remove failed", "channel", w.channelID, "file", name, "outcome", o.Status, "err", err)
 		if !o.OK {
 			// Not delivered and not removed: it's still queued, so don't
@@ -361,6 +371,14 @@ func (w *worker) finish(name, reqID, callerID string, o Outcome, metricOutcome s
 		w.metrics.Delivery(w.channelID, metricOutcome)
 		w.settle(reqID, callerID, o)
 		return false
+
+	case !claimed:
+		// Another settler got there first and owns the outcome. Settling anyway
+		// would put two contradictory terminal lines under one request id and
+		// count the same notification twice in the metrics.
+		slog.Info("spool item already claimed elsewhere; not settling twice",
+			"channel", w.channelID, "file", name, "outcome", o.Status)
+		return true
 	}
 	w.metrics.Delivery(w.channelID, metricOutcome)
 	w.settle(reqID, callerID, o)

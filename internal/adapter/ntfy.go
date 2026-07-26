@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -58,9 +59,23 @@ func newNtfy(id string, decode Decode) (*ntfyAdapter, error) {
 		server: strings.TrimRight(c.Server, "/"),
 		topic:  c.Topic,
 		token:  c.Token,
-		client: &http.Client{}, // per-attempt timeout comes via ctx
+		client: &http.Client{ // per-attempt timeout comes via ctx
+			// Refuse redirects rather than follow them. Go's default policy turns
+			// a 301/302/303 into a GET and drops the body, so an `http://`
+			// server= that redirects to https would publish nothing, return the
+			// landing page's 200, and be recorded as delivered — silent loss with
+			// a success line in the log. Even a body-preserving 307 would resend
+			// the bearer token to whatever host the redirect names.
+			CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+				return fmt.Errorf("%w to %s", errRedirected, req.URL.Redacted())
+			},
+		},
 	}, nil
 }
+
+// errRedirected marks the refusal above so Send can report it as the
+// configuration error it almost always is, rather than retrying it for a TTL.
+var errRedirected = errors.New("server redirected the publish")
 
 var ntfyPriorities = map[notify.Priority]int{
 	notify.PriorityLow:     2,
@@ -95,6 +110,9 @@ func (a *ntfyAdapter) Send(ctx context.Context, n notify.Notification) error {
 
 	resp, err := a.client.Do(req)
 	if err != nil {
+		if errors.Is(err, errRedirected) {
+			return Permanent("ntfy: %v — point server= at the final URL (https, no trailing redirect)", err)
+		}
 		return Retryable("ntfy: %v", err)
 	}
 	defer resp.Body.Close()

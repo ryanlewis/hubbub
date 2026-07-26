@@ -73,8 +73,8 @@ func TestParseErrorsUseTheGivenName(t *testing.T) {
 func TestValidCallerID(t *testing.T) {
 	ok := []string{"dev", "claude-routines", "ops_bot", "a", "A1"}
 	for _, id := range ok {
-		if err := validCallerID(id); err != nil {
-			t.Errorf("validCallerID(%q) = %v, want nil", id, err)
+		if err := ValidCallerID(id); err != nil {
+			t.Errorf("ValidCallerID(%q) = %v, want nil", id, err)
 		}
 	}
 	// A dotted id is legal TOML when quoted, but ["ops.team"] and [ops.team]
@@ -82,8 +82,8 @@ func TestValidCallerID(t *testing.T) {
 	// dashboard locates a caller by matching its header in the source text.
 	bad := []string{"", "ops.team", "a/b", "a b", "a[b", "a\"b", strings.Repeat("x", 65)}
 	for _, id := range bad {
-		if err := validCallerID(id); err == nil {
-			t.Errorf("validCallerID(%q) = nil, want an error", id)
+		if err := ValidCallerID(id); err == nil {
+			t.Errorf("ValidCallerID(%q) = nil, want an error", id)
 		}
 	}
 }

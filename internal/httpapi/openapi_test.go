@@ -197,6 +197,52 @@ func TestOpenAPIRequestSchemaMatchesTheDecoder(t *testing.T) {
 	}
 }
 
+// The caps the handler enforces are byte caps, and JSON Schema's maxLength
+// counts characters — a 256-emoji title validates clean against maxLength: 256
+// and is then rejected by the server as roughly a kilobyte. So the spec carries
+// them as an x- extension, which validators ignore rather than assert wrongly,
+// and this pins the numbers to the constants they describe.
+func TestOpenAPIByteCapsMatchTheValidator(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer up.Close()
+	s := newTestServer(t, up.URL, "")
+
+	spec := servedSpec(t, s, nil)
+	props, ok := dig(spec, "components", "schemas", "NotifyRequest", "properties")
+	if !ok {
+		t.Fatal("spec has no NotifyRequest.properties")
+	}
+
+	for field, want := range map[string]int{
+		"title":   notify.MaxTitleLen,
+		"message": notify.MaxMessageLen,
+		"html":    notify.MaxHTMLLen,
+	} {
+		schema, _ := props[field].(map[string]any)
+		got, ok := schema["x-max-bytes"].(float64)
+		if !ok {
+			t.Errorf("%s has no x-max-bytes; a byte cap nobody documents is a 400 nobody predicted", field)
+			continue
+		}
+		if int(got) != want {
+			t.Errorf("%s x-max-bytes = %d, want %d", field, int(got), want)
+		}
+		if _, wrong := schema["maxLength"]; wrong {
+			t.Errorf("%s carries maxLength, which counts characters and disagrees with the server", field)
+		}
+	}
+
+	tags, _ := props["tags"].(map[string]any)
+	if items, _ := tags["items"].(map[string]any); items != nil {
+		if got, ok := items["x-max-bytes"].(float64); !ok || int(got) != notify.MaxTagLen {
+			t.Errorf("tags item x-max-bytes = %v, want %d", items["x-max-bytes"], notify.MaxTagLen)
+		}
+	}
+	if got, ok := tags["maxItems"].(float64); !ok || int(got) != notify.MaxTags {
+		t.Errorf("tags maxItems = %v, want %d", tags["maxItems"], notify.MaxTags)
+	}
+}
+
 // TestOpenAPIPriorityEnumMatchesTheParser checks both directions: everything
 // documented parses, and nothing outside the enum sneaks through. A spec
 // listing a priority the parser rejects turns a by-the-book caller into a 400.

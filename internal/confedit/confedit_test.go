@@ -173,6 +173,47 @@ func TestConcurrentAppliesSerialise(t *testing.T) {
 	}
 }
 
+// The ETag is checked before the edit runs, but the edit, the loader's
+// validation, a write and two fsyncs all take time — and a hand-edit that lands
+// inside that window used to be overwritten by the rename, against the promise
+// that a concurrent hand-edit wins.
+func TestApplyRefusesAnEditThatLandedMidWrite(t *testing.T) {
+	f := newFile(t, "key = \"one\"\n")
+	_, etag, err := f.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const handEdit = "key = \"typed over ssh\"\n"
+	_, err = f.Apply(etag, func(src []byte) ([]byte, error) {
+		// Somebody saves over SSH while the dashboard's edit is being prepared.
+		if err := os.WriteFile(f.Path, []byte(handEdit), 0o600); err != nil {
+			return nil, err
+		}
+		return []byte("key = \"from the dashboard\"\n"), nil
+	})
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("err = %v, want ErrConflict", err)
+	}
+
+	got, err := os.ReadFile(f.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != handEdit {
+		t.Errorf("file = %q, want the hand edit left intact", got)
+	}
+	entries, err := os.ReadDir(filepath.Dir(f.Path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), tempPrefix) {
+			t.Errorf("a refused commit left %s behind — it holds credentials", e.Name())
+		}
+	}
+}
+
 func TestNoTempFileLeftBehind(t *testing.T) {
 	f := newFile(t, "a = 1\n")
 	dir := filepath.Dir(f.Path)

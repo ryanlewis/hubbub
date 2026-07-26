@@ -29,11 +29,11 @@ type Record struct {
 	// from the admin identity provider, not a caller id — a permission change
 	// is worth being able to attribute months later, and the delivery log is
 	// already the file that survives restarts and gets rotated.
-	Actor     string            `json:"actor,omitempty"`
-	Action    string            `json:"action,omitempty"`
-	Peer      string            `json:"peer,omitempty"` // auth_fail lines
-	ClaimedIP string            `json:"claimedIp,omitempty"`
-	Detail    string            `json:"detail,omitempty"`
+	Actor     string `json:"actor,omitempty"`
+	Action    string `json:"action,omitempty"`
+	Peer      string `json:"peer,omitempty"` // auth_fail lines
+	ClaimedIP string `json:"claimedIp,omitempty"`
+	Detail    string `json:"detail,omitempty"`
 }
 
 type Logger struct {
@@ -65,6 +65,17 @@ func (l *Logger) Append(r Record) {
 	defer l.mu.Unlock()
 	if _, err := l.f.Write(append(line, '\n')); err != nil {
 		slog.Error("delivery log write failed", "err", err)
+		return
+	}
+	// A terminal line is the only surviving record of a settled 202: the spool
+	// file it describes was deliberately unlinked before this write, because the
+	// reverse order risks re-delivering a message that already went out. So this
+	// one kind gets flushed to disk. A request line can ride the page cache — the
+	// message it describes is still spooled, and will be settled again later.
+	if r.Kind == "terminal" {
+		if err := l.f.Sync(); err != nil {
+			slog.Error("delivery log sync failed", "err", err)
+		}
 	}
 }
 

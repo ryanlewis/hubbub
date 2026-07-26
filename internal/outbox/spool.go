@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -49,43 +50,92 @@ func newSpool(dir string) (*spool, error) {
 	return &spool{dir: dir}, nil
 }
 
-// put writes the item under a temp name then renames it into place.
+// put writes the item under a temp name, flushes it, then renames it into
+// place.
 func (s *spool) put(it *Item) error {
-	data, err := json.Marshal(it)
-	if err != nil {
-		return err
-	}
-	name := fileName(it)
-	tmp := filepath.Join(s.dir, name+".tmp")
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, filepath.Join(s.dir, name))
+	return s.write(fileName(it), it)
 }
 
 // rewrite persists updated attempt state under the SAME name, keeping the
 // item's queue position (write tmp, rename over).
 func (s *spool) rewrite(name string, it *Item) error {
+	return s.write(name, it)
+}
+
+// write is the durable write both paths share.
+//
+// The syncs are what make a 202 mean "spooled" rather than "probably spooled".
+// Rename is atomic but not durable: after a power loss the directory entry can
+// be visible while the data blocks are not, which leaves a zero-length or torn
+// item that the next drain scan reads as corrupt and drops — for a message the
+// caller was already promised. Same two syncs, and the same reasoning, as the
+// config writes in internal/confedit.
+func (s *spool) write(name string, it *Item) error {
 	data, err := json.Marshal(it)
 	if err != nil {
 		return err
 	}
 	tmp := filepath.Join(s.dir, name+".tmp")
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	if err := writeSync(tmp, data); err != nil {
+		// A temp file from a failed write is invisible to list(), which filters
+		// on .json, so nothing would ever clean it up.
+		os.Remove(tmp)
 		return err
 	}
-	return os.Rename(tmp, filepath.Join(s.dir, name))
+	if err := os.Rename(tmp, filepath.Join(s.dir, name)); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	// Past the rename the message is queued and will be delivered. Reporting an
+	// error now would tell the caller its notification failed while the worker
+	// goes on to send it, so a directory sync that fails is logged, not returned.
+	if err := syncDir(s.dir); err != nil {
+		slog.Error("spool dir sync failed", "dir", s.dir, "file", name, "err", err)
+	}
+	return nil
 }
 
-func (s *spool) remove(name string) error {
-	_, err := s.claim(name)
-	return err
+func writeSync(path string, data []byte) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+// syncDir flushes the directory entry a rename just created. Deliberately a
+// local copy of what confedit does rather than a shared helper: outbox does not
+// import the config side of the tree, and this is ten lines.
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	// Directory fsync is not supported everywhere; the data sync above is the
+	// part that matters most, so a platform that refuses this is not fatal.
+	if err := d.Sync(); err != nil && !errors.Is(err, os.ErrInvalid) {
+		return err
+	}
+	return nil
 }
 
 // claim removes name and reports whether this caller is the one that unlinked
 // it. A file that was already gone belongs to whoever removed it: two settlers
 // racing over the same item — a worker finishing while its channel's spool is
 // purged, say — would otherwise both write a terminal line for it.
+//
+// Every unlink goes through here and every caller has to look at the bool.
+// There used to be a remove() wrapper that dropped it, and the worker's finish
+// path silently settled items the reaper had already settled.
 func (s *spool) claim(name string) (bool, error) {
 	if err := os.Remove(filepath.Join(s.dir, name)); err != nil {
 		if os.IsNotExist(err) {

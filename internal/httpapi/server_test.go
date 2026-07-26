@@ -206,6 +206,46 @@ func TestNotifyRejectsAnExplicitlyEmptyChannelList(t *testing.T) {
 	}
 }
 
+// `null` is the same shape of hazard as `[]`, and a *[]string could not tell it
+// from an omitted field: encoding/json sets the pointer to nil for both, so a
+// caller whose target list came back null fanned out to everything its key
+// permits.
+func TestNotifyRejectsANullChannelList(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("a null channel selection must not deliver anything")
+	}))
+	defer up.Close()
+	s := newTestServer(t, up.URL, "")
+
+	rec, body := post(t, s.PublicMux(), "/v1/notify", devKey, `{"title":"a","message":"b","channels":null}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("null channels: %d, want 400 (never a silent widen to the full permission set)", rec.Code)
+	}
+	if msg, _ := body["error"].(string); !strings.Contains(msg, "null") {
+		t.Errorf("error = %q, want it to name what was wrong", msg)
+	}
+}
+
+// dec.More() is not a trailing-data check: it reports whether another *value*
+// follows, and a stray closing brace is not the start of one.
+func TestNotifyRejectsTrailingData(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer up.Close()
+	s := newTestServer(t, up.URL, "")
+
+	for _, body := range []string{
+		`{"title":"a","message":"b"}}`,
+		`{"title":"a","message":"b"}]`,
+		`{"title":"a","message":"b"} {"title":"c","message":"d"}`,
+		`{"title":"a","message":"b"}garbage`,
+	} {
+		rec, _ := post(t, s.PublicMux(), "/v1/notify", devKey, body)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want 400", body, rec.Code)
+		}
+	}
+}
+
 // RFC 7235 §2.1: the auth-scheme token is case-insensitive. Rejecting
 // "bearer " 401'd a valid key and wrote an auth_fail line, making a client
 // casing bug indistinguishable from someone guessing keys.
@@ -238,6 +278,14 @@ func TestRateCap(t *testing.T) {
 	}
 	if rec.Header().Get("Retry-After") == "" {
 		t.Error("429 must carry Retry-After")
+	}
+	// Rounded up, not to nearest: a machine that obeys Retry-After to the second
+	// must not land back inside the same window and get a second 429.
+	s.Rate = NewRateLimiter(1, 1400*time.Millisecond)
+	post(t, s.PublicMux(), "/v1/notify", devKey, `{"title":"a","message":"b"}`)
+	rec, _ = post(t, s.PublicMux(), "/v1/notify", devKey, `{"title":"a","message":"b"}`)
+	if got := rec.Header().Get("Retry-After"); got != "2" {
+		t.Errorf("Retry-After = %q with ~1.4s of window left, want \"2\"", got)
 	}
 	if body["result"] != "rate_capped" {
 		t.Errorf("result = %v", body["result"])

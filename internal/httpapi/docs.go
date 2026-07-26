@@ -292,14 +292,14 @@ func rules(s *oaSchema) string {
 	if s.Const != nil {
 		out = append(out, fmt.Sprintf("always %v", s.Const))
 	}
-	if s.MaxLength != nil {
-		out = append(out, fmt.Sprintf("≤ %d bytes", *s.MaxLength))
+	if s.MaxBytes != nil {
+		out = append(out, fmt.Sprintf("≤ %d bytes", *s.MaxBytes))
 	}
 	if s.MaxItems != nil {
 		out = append(out, fmt.Sprintf("≤ %d items", *s.MaxItems))
 	}
-	if s.Items != nil && s.Items.MaxLength != nil {
-		out = append(out, fmt.Sprintf("each ≤ %d bytes", *s.Items.MaxLength))
+	if s.Items != nil && s.Items.MaxBytes != nil {
+		out = append(out, fmt.Sprintf("each ≤ %d bytes", *s.Items.MaxBytes))
 	}
 	if s.Default != nil {
 		out = append(out, fmt.Sprintf("default: %v", s.Default))
