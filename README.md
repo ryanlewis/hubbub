@@ -642,3 +642,7 @@ you bolt it on with a reverse proxy, with no per-key issue and revoke.
 [ntfy](https://ntfy.sh/) is a delivery target rather than a fan-out hub, and is
 hubbub's first adapter. [Novu](https://novu.co/) is real notification
 infrastructure and considerably more than a personal hub needs.
+
+## Licence
+
+[MIT](LICENSE).
