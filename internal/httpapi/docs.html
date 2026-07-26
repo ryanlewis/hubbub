@@ -8,44 +8,20 @@
 <title>{{.Title}} API reference</title>
 <style nonce="{{.Nonce}}">
 {{template "theme"}}
-{{template "navstyle"}}
+{{template "chromestyle"}}
   :root {
     /* The page shell. Left unbounded, the flex layout pins everything to the
-       left edge and a wide monitor gets two thirds of a screen of nothing. */
+       left edge and a wide monitor gets two thirds of a screen of nothing.
+       It matches --bar-w, so on this page — the widest of the three — the
+       masthead lines up exactly with the columns under it. */
     --shell: 84rem;
     /* Prose is capped far tighter than the shell: tables want every pixel,
        sentences want ~75 characters. One width cannot serve both. */
     --measure: 46rem;
+    /* Everything that pins itself below the header clears both of its rows. */
+    --stuck: calc(var(--bar-h) + var(--keybar-h));
   }
   body { margin: 0; }
-  header {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    border-bottom: 1px solid var(--rule-strong);
-    background: var(--bg);
-  }
-  header .bar {
-    max-width: var(--shell);
-    margin: 0 auto;
-    padding: 0.8rem 2rem;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem 1.1rem;
-    align-items: center;
-  }
-  header h1 {
-    margin: 0;
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-  header h1 .base { letter-spacing: 0.08em; }
-  header .base { color: var(--muted); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
-  header .key { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
-  header .key label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-  input[type=password] { width: 18rem; }
   textarea { width: 100%; max-width: 58rem; min-height: 7.5rem; resize: vertical; line-height: 1.6; }
   .layout {
     display: flex;
@@ -57,7 +33,7 @@
      header is a <nav> too, and every rule here would land on it. */
   nav.toc {
     position: sticky;
-    top: 3.6rem;
+    top: var(--stuck);
     flex: 0 0 14rem;
     padding: 1.75rem 0 3rem 2rem;
     font-size: 0.875rem;
@@ -90,7 +66,9 @@
     margin-top: 2.25rem;
     padding-top: 1.75rem;
     border-top: 1px dashed var(--rule);
-    scroll-margin-top: 4.5rem;
+    /* Jumped to from the rail, so the heading has to clear the header that is
+       still sitting over the top of the page. */
+    scroll-margin-top: calc(var(--stuck) + 0.75rem);
   }
   section.endpoint h2 { margin: 0 0 0.5rem; font-size: 15px; font-weight: 700; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
   .auth {
@@ -187,30 +165,19 @@
   }
   footer p { max-width: var(--shell); margin: 0 auto; padding: 1.2rem 2rem; }
   @media (max-width: 55rem) {
+    /* The key field wraps onto a line of its own down here, so anything that
+       measures itself against the header has a taller header to clear. */
+    :root { --stuck: calc(var(--bar-h) + var(--keybar-h) + 2rem); }
     /* The endpoint list goes; the site nav stays — it is how you leave. */
     nav.toc { display: none; }
     main { padding: 1.5rem 1.25rem 4rem; }
-    header .bar { padding: 0.9rem 1.25rem; }
     footer p { padding: 1.5rem 1.25rem; }
-    header .key { margin-left: 0; width: 100%; }
-    input[type=password] { flex: 1 1 auto; width: auto; }
   }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="bar">
-    <h1>{{.Title}} <span class="base">v{{.Version}}</span></h1>
-    <span class="base">{{.BaseURL}}</span>
-    <span class="rule"></span>
-    {{template "nav" .Nav}}
-    <span class="key">
-      <label for="apikey">Bearer key</label>
-      <input type="password" id="apikey" autocomplete="off" spellcheck="false" placeholder="kept in this tab only">
-    </span>
-  </div>
-</header>
+{{template "masthead" .Chrome}}
 
 <div class="layout">
 

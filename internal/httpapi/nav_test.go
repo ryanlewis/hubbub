@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -30,6 +31,45 @@ func TestEveryPageCarriesTheSiteNav(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestEveryPageWearsTheSameMasthead. The bar is the one thing on screen through
+// every navigation, so a page that draws its own — a different height, a
+// different wordmark, the chips somewhere else — makes moving between them a
+// flinch. Compared with the two things that are allowed to differ removed: which
+// chip is current, and the stamp on the right that names the operator.
+func TestEveryPageWearsTheSameMasthead(t *testing.T) {
+	s, _, _ := adminServer(t)
+
+	var first, firstPath string
+	for _, path := range []string{"/", "/docs", "/admin"} {
+		// As the operator throughout, so the Admin chip is offered on all three
+		// and its absence elsewhere isn't read as drift.
+		bar := mastheadOf(t, adminGet(t, s, path, adminEmail).Body.String(), path)
+		if first == "" {
+			first, firstPath = bar, path
+			continue
+		}
+		if bar != first {
+			t.Errorf("the masthead on %s differs from the one on %s:\n%s\n%s", path, firstPath, first, bar)
+		}
+	}
+}
+
+var (
+	mastheadRE = regexp.MustCompile(`(?s)<header class="top">.*?<span class="rule">`)
+	currentRE  = regexp.MustCompile(` aria-current="page"`)
+)
+
+// mastheadOf returns the shared part of a page's header: everything up to the
+// rule that separates it from the per-page stamp.
+func mastheadOf(t *testing.T, body, path string) string {
+	t.Helper()
+	bar := mastheadRE.FindString(body)
+	if bar == "" {
+		t.Fatalf("GET %s has no masthead", path)
+	}
+	return currentRE.ReplaceAllString(bar, "")
 }
 
 // TestNavMarksThePageYouAreOn: three near-identical links with no indication of

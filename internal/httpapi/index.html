@@ -11,26 +11,14 @@
 <title>hubbub</title>
 <style>
 {{template "theme"}}
-{{template "navstyle"}}
-  body {
+{{template "chromestyle"}}
+  body { margin: 0; }
+  /* The reading column, narrower than the bar above it on purpose: the masthead
+     is chrome and spans the window, prose is capped where it stays readable. */
+  main.page {
     max-width: 50rem;
     margin: 0 auto;
     padding: 1.75rem 1.25rem 4rem;
-  }
-  /* Masthead: wordmark, a rule that eats the slack, then the nav and version. */
-  header.top {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.85rem;
-    margin-bottom: 1.75rem;
-  }
-  header.top h1 {
-    margin: 0;
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
   }
   /* Section heads are micro-labels with the rule carried out to the margin,
      which is what marks a new section here — there is no larger type to do it. */
@@ -95,12 +83,9 @@
 </head>
 <body>
 
-<header class="top">
-  <h1>hubbub</h1>
-  <span class="rule"></span>
-  {{template "nav" .Nav}}
-  <span class="label">v{{.Version}}</span>
-</header>
+{{template "masthead" .Chrome}}
+
+<main class="page">
 
 <p class="tagline">One authenticated endpoint in — notifications out to the operator's channels.</p>
 
@@ -194,6 +179,8 @@ code; <code>result</code> repeats it in the body.</p>
     This page documents the API, not the deployment behind it.
   </p>
 </footer>
+
+</main>
 
 </body>
 </html>

@@ -104,9 +104,7 @@ func (s *Server) adminRoutes(mux *http.ServeMux) {
 
 type adminView struct {
 	Nonce      string
-	Nav        navView
-	Version    string
-	Actor      string
+	Chrome     chromeView
 	Channels   []adminChannel
 	Callers    []adminCaller
 	ChannelIDs []string
@@ -180,12 +178,14 @@ func (s *Server) renderAdmin(w http.ResponseWriter, r *http.Request, v *adminVie
 	}
 
 	id, _, _ := s.Admin.Guard.Identity(r)
-	v.Actor = id.Email
-	v.Version = Version
 	v.Nonce = rand.Text()
 	// Not adminLink(r): reaching this render means the guard already let the
 	// visitor through, so asking again could only ever disagree with itself.
-	v.Nav = navView{Current: "/admin", Admin: true}
+	v.Chrome = chromeView{
+		Nav:     navView{Current: "/admin", Admin: true},
+		Version: Version,
+		Actor:   id.Email,
+	}
 	if err := s.fillAdminState(v); err != nil {
 		v.Error = strings.TrimSpace(v.Error + "\n" + err.Error())
 	}

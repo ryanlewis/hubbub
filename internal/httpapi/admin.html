@@ -8,31 +8,19 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style nonce="{{.Nonce}}">
 {{template "theme"}}
-{{template "navstyle"}}
-body {
+{{template "chromestyle"}}
+body { margin: 0; }
+/* The working column, narrower than the bar above it: the masthead is chrome
+   and spans the window, the cards stay at a width you can scan down. */
+main.page {
   max-width: 62rem;
   margin: 0 auto;
-  padding: 1.75rem 1.25rem 5rem;
+  padding: 2rem 1.25rem 5rem;
 }
-/* Masthead: wordmark, a rule that eats the slack, then the nav and identity. */
-header.top {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.85rem;
-  align-items: center;
-  margin-bottom: 1.5rem;
-}
-header.top h1 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-/* Micro-label sizing, but not the uppercasing: the actor is an identity the
-   operator signed in as, and an address is data to be read back, not a label. */
-.who { color: var(--muted); font-size: 11px; letter-spacing: 0.06em; }
-.who b { color: var(--fg); font-weight: 700; }
+/* Whatever the page opens with — a banner, a fresh key, the first section —
+   sets its own distance from what came before it, and above it there is now a
+   header rather than a sibling. */
+main.page > :first-child { margin-top: 0; }
 
 /* --- sections ------------------------------------------------------------ */
 
@@ -86,6 +74,9 @@ h2::after { content: ""; flex: 1; border-top: 1px dashed var(--rule); }
   background: var(--panel);
   padding: 0.85rem 1.05rem;
   margin-bottom: 0.5rem;
+  /* Every Settings link jumps to a card by id, and the bar is sticky: without
+     this the row you asked for opens underneath it. */
+  scroll-margin-top: calc(var(--bar-h) + 0.75rem);
 }
 .card.editing { border-color: var(--accent); border-left-color: var(--accent); }
 /* A paused channel should read as parked, not broken: the rail and the name go
@@ -316,12 +307,9 @@ label.grant:has(input:checked) .paused { color: inherit; }
 </head>
 <body>
 
-<header class="top">
-  <h1>hubbub admin</h1>
-  <span class="rule"></span>
-  {{template "nav" .Nav}}
-  <span class="who"><b>{{.Actor}}</b> · v{{.Version}}</span>
-</header>
+{{template "masthead" .Chrome}}
+
+<main class="page">
 
 {{if .Error}}<div class="banner err">{{.Error}}</div>{{end}}
 {{if .Notice}}<div class="banner ok">{{.Notice}}</div>{{end}}
@@ -530,6 +518,8 @@ label.grant:has(input:checked) .paused { color: inherit; }
 </section>
 
 {{end}}
+
+</main>
 
 <script nonce="{{.Nonce}}">
 // The only script on the page, and nothing here is load-bearing: without it the

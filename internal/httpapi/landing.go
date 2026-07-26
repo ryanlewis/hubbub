@@ -13,10 +13,11 @@ import (
 // The pages served to readers who arrive without a key. `theme.html` holds only
 // the shared colour tokens, so a palette change lands on every page at once
 // instead of being reapplied by hand to whichever ones someone remembers.
-// `nav.html` is the same bargain for the site navigation, markup and style
-// together: a link added there appears on all three pages or on none.
+// `chrome.html` is the same bargain for the masthead, markup and style
+// together: the bar is identical on all three pages or on none, and a link
+// added to it appears everywhere.
 //
-//go:embed index.html docs.html admin.html nav.html theme.html llms.txt
+//go:embed index.html docs.html admin.html chrome.html theme.html llms.txt
 var pages embed.FS
 
 // Embedded separately from pages: it is served as bytes, never templated, and
@@ -32,7 +33,24 @@ var faviconSVG []byte
 type pageData struct {
 	BaseURL string
 	Version string
+	Chrome  chromeView
+}
+
+// chromeView is the masthead every browser page wears. The bar itself is one
+// piece of markup in one place (chrome.html); what differs between pages is
+// data, so no page can quietly grow a header of its own.
+type chromeView struct {
 	Nav     navView
+	Version string
+	// Actor is the operator the proxy says is signed in — the dashboard only.
+	// The other two pages are readable by anyone who can reach the hub, so
+	// there is nobody to name.
+	Actor string
+	// KeyBar adds the docs page's second row: the endpoint its Try-it panels
+	// fire at, and the field the key is typed into. BaseURL is only read when
+	// it is set.
+	KeyBar  bool
+	BaseURL string
 }
 
 // navView is the site navigation, shared by the three pages a browser lands on.
@@ -53,7 +71,7 @@ type navView struct {
 // TestLandingTemplatesParse is what keeps it out of a shipped binary.
 var (
 	htmlPages = sync.OnceValues(func() (*htmltmpl.Template, error) {
-		return htmltmpl.ParseFS(pages, "theme.html", "nav.html", "index.html", "docs.html", "admin.html")
+		return htmltmpl.ParseFS(pages, "theme.html", "chrome.html", "index.html", "docs.html", "admin.html")
 	})
 	llmsTmpl = sync.OnceValues(func() (*texttmpl.Template, error) {
 		return texttmpl.ParseFS(pages, "llms.txt")
@@ -82,7 +100,10 @@ func handleIndex(adminLink func(*http.Request) bool) http.HandlerFunc {
 		data := pageData{
 			BaseURL: baseURL(r),
 			Version: Version,
-			Nav:     navView{Current: "/", Admin: adminLink(r)},
+			Chrome: chromeView{
+				Nav:     navView{Current: "/", Admin: adminLink(r)},
+				Version: Version,
+			},
 		}
 		renderPageTemplate(w, tmpl, "index.html", data, "text/html; charset=utf-8")
 	}

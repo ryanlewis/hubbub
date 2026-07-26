@@ -1,0 +1,130 @@
+{{define "chromestyle"}}
+  /* Site chrome: the masthead, and the nav that lives in it.
+
+     One bar, drawn identically on every page — same height, same position, same
+     order of parts — so that moving between the landing page, the docs and the
+     dashboard doesn't redraw the top of the window. Each page used to style its
+     own header, and the three had drifted into a sticky full-width bar, a plain
+     inline masthead and a third thing: flipping between them was a flinch.
+
+     What a page may add is the row underneath, not a bar of its own. */
+  :root {
+    /* The bar spans the widest page rather than the current one. Pages here run
+       50–84rem wide, and a bar that tracked each would slide sideways on every
+       navigation, which is the flinch this exists to remove. Full-bleed chrome
+       over a narrower column is the trade: the border reaches the window edge,
+       the prose stays capped where it reads. */
+    --bar-w: 84rem;
+    /* Exported because the docs page sticks its endpoint rail below the header,
+       and would otherwise hardcode a number that goes stale the moment anything
+       in the bar changes height. */
+    --bar-h: 3.25rem;
+    --keybar-h: 3rem;
+  }
+  header.top {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--bg);
+    border-bottom: 1px solid var(--rule-strong);
+  }
+  header.top .bar,
+  header.top .keybar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem 0.9rem;
+    max-width: var(--bar-w);
+    margin: 0 auto;
+    padding: 0.5rem 2rem;
+  }
+  header.top .bar { min-height: var(--bar-h); }
+  header.top h1 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  /* Micro-label sizing, but not the uppercasing: a version and an operator's
+     address are data to be read back, not labels. */
+  header.top .stamp { font-size: 11px; letter-spacing: 0.06em; color: var(--muted); }
+  header.top .stamp b { color: var(--fg); font-weight: 700; }
+  /* Second row: what the docs page's Try-it panels fire at, and the key they
+     carry. It belongs in the header because those panels are spread down the
+     whole page, and the header is the part that stays on screen. */
+  header.top .keybar {
+    min-height: var(--keybar-h);
+    border-top: 1px dashed var(--rule);
+  }
+  header.top .keybar code { background: none; padding: 0; color: var(--fg-1); }
+  header.top .keybar input { width: 18rem; }
+  @media (max-width: 55rem) {
+    /* The gutter the pages themselves use, so the wordmark lines up with the
+       text beneath it once the window is too narrow for the bar to be wider
+       than the column. */
+    header.top .bar,
+    header.top .keybar { padding: 0.5rem 1.25rem; }
+    header.top .keybar input { flex: 1 1 auto; width: auto; }
+  }
+
+  /* Chip group: one outer border with dividers between, active chip inverted.
+     Chrome, not content — the links stay quiet until hovered so that three of
+     them beside the wordmark don't read as the substance of the page. */
+  .sitenav {
+    display: flex;
+    flex-wrap: wrap;
+    border: 1px solid var(--rule-strong);
+  }
+  .sitenav a {
+    padding: 0.25rem 0.65rem;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-decoration: none;
+    white-space: nowrap;
+    border-right: 1px solid var(--rule-strong);
+  }
+  .sitenav a:last-child { border-right: 0; }
+  .sitenav a:hover { color: var(--fg); background: var(--code-bg); }
+  /* Inverted, like every other active chip — but to the accent rather than to
+     `--fg`. Against the warm paper ground a near-black slab is the highest
+     contrast on the page, and it read as harsh for what is only a "you are
+     here" mark. The rust keeps the reverse-video language and stays well clear
+     of AA in both schemes. */
+  .sitenav a[aria-current="page"] { background: var(--accent); color: var(--bg); }
+  .sitenav a:focus-visible { outline-offset: -3px; }
+{{end}}
+
+{{define "masthead"}}
+<header class="top">
+  <div class="bar">
+    {{/* The wordmark is the same on every page and the chips sit against it,
+         rather than across the row: which page you are on is the active chip's
+         job, and chips that shifted with the length of whatever the right-hand
+         end happened to say is the movement this bar exists to avoid. */}}
+    <h1>hubbub</h1>
+    {{template "nav" .Nav}}
+    <span class="rule"></span>
+    <span class="stamp">{{with .Actor}}<b>{{.}}</b> · {{end}}v{{.Version}}</span>
+  </div>
+  {{if .KeyBar}}
+  <div class="keybar">
+    <span class="label">Endpoint</span>
+    <code>{{.BaseURL}}</code>
+    <span class="rule"></span>
+    <label class="label" for="apikey">Bearer key</label>
+    <input type="password" id="apikey" autocomplete="off" spellcheck="false" placeholder="kept in this tab only">
+  </div>
+  {{end}}
+</header>
+{{end}}
+
+{{define "nav"}}
+<nav class="sitenav" aria-label="Site">
+  <a href="/"{{if eq .Current "/"}} aria-current="page"{{end}}>Home</a>
+  <a href="/docs"{{if eq .Current "/docs"}} aria-current="page"{{end}}>API docs</a>
+  {{if .Admin}}<a href="/admin"{{if eq .Current "/admin"}} aria-current="page"{{end}}>Admin</a>{{end}}
+</nav>
+{{end}}

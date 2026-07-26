@@ -43,7 +43,7 @@ func TestLandingTemplatesParse(t *testing.T) {
 	// Named explicitly: ParseFS is happy to return a set that is missing the
 	// page a handler asks for, and that failure would only show up as a 500 in
 	// production.
-	for _, name := range []string{"index.html", "docs.html", "admin.html", "theme", "nav", "navstyle"} {
+	for _, name := range []string{"index.html", "docs.html", "admin.html", "theme", "nav", "masthead", "chromestyle"} {
 		if set.Lookup(name) == nil {
 			t.Errorf("template set has no %q", name)
 		}
