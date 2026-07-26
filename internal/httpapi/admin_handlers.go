@@ -62,7 +62,7 @@ func (s *Server) preview(w http.ResponseWriter, r *http.Request, f *confedit.Fil
 		s.ok(w, r, "Nothing to change.")
 		return true
 	}
-	cv.Diff = d
+	cv.Diff = maskDiff(d, s.maskFor(f))
 	cv.Added, cv.Deleted = confedit.Counts(d)
 	if cv.Fields == nil {
 		cv.Fields = map[string]string{}

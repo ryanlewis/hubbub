@@ -29,9 +29,13 @@ type Admin struct {
 // records; nowhere near enough to use.
 const keyPrefixLen = 10
 
-// maskedSecret is what a credential looks like in the settings editor. Left
-// unchanged on submit, it means "keep whatever is on disk".
-const maskedSecret = `"••••••••"`
+// maskedValue is what a credential's text becomes on screen.
+const maskedValue = "••••••••"
+
+// maskedSecret is that value as it appears in the settings editor, where it has
+// to be a legal TOML string. Left unchanged on submit, it means "keep whatever
+// is on disk".
+const maskedSecret = `"` + maskedValue + `"`
 
 // secretish reports whether a setting holds a credential.
 //
@@ -259,6 +263,73 @@ func maskSecrets(body []byte) []byte {
 		last = k.End
 	}
 	return append(out, body[last:]...)
+}
+
+// lineMask decides what one value in a config line looks like on screen.
+type lineMask func(name, raw string) string
+
+// maskFor picks the mask a file's own text must pass through before a browser
+// sees it.
+//
+// It asks which file rather than taking an argument so that the strict mask is
+// what a caller gets by default: a preview added later for a file nobody
+// considered here is over-masked at worst, instead of shipping credentials to
+// the DOM because a parameter was forgotten.
+func (s *Server) maskFor(f *confedit.File) lineMask {
+	if f == s.Admin.Channels {
+		return maskChannelSetting
+	}
+	return maskCallerValue
+}
+
+// maskChannelSetting blanks the credentials in channels.toml. Everything else
+// in that file — servers, topics, from addresses — is what the operator opened
+// the page to read, so only a secretish name is touched.
+func maskChannelSetting(name, raw string) string {
+	if raw == "" || !secretish(name) {
+		return raw
+	}
+	return maskedValue
+}
+
+// maskCallerValue cuts a value in keys.toml down to what the caller list
+// already shows.
+//
+// The rule is inverted here because the file is nothing but credentials: mask
+// everything except the fields that demonstrably are not, and treat a value no
+// field name could be attached to as a credential as well. A hand-written
+// multi-line `key = [` array is exactly that case, and "I could not tell what
+// this line was" must never resolve to "so here is the key".
+func maskCallerValue(name, raw string) string {
+	switch name {
+	case "channels", "defaults":
+		return raw
+	}
+	if raw == "" {
+		return raw
+	}
+	// A prefix is what makes a diff checkable — it matches the line against the
+	// row that asked for the change, which is the whole point of confirming.
+	// Anything short enough that a prefix would give most of it away is blanked
+	// instead; a 16-byte key is a poor key, but it is still a live one.
+	if len(raw) > keyPrefixLen*2 {
+		return prefixOf(raw)
+	}
+	return maskedValue
+}
+
+// maskDiff redacts a diff for display.
+//
+// Deliberately after Diff, never before it: masking the two files first would
+// make a changed password diff as no change at all, and the operator would be
+// told there was nothing to do while their edit sat unapplied. Diffing the real
+// bytes and masking only the rendering keeps the line counts honest.
+func maskDiff(d []confedit.DiffLine, mask lineMask) []confedit.DiffLine {
+	out := make([]confedit.DiffLine, len(d))
+	for i, l := range d {
+		out[i] = confedit.DiffLine{Op: l.Op, Text: string(tomledit.MaskStrings([]byte(l.Text), mask))}
+	}
+	return out
 }
 
 // unmaskSecrets puts real values back where the operator left the mask alone.

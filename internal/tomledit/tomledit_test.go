@@ -588,6 +588,64 @@ tls = "starttls"  # trailing comment
 	}
 }
 
+// A mask that reformats the line around the value is a mask that makes a diff
+// unreadable, and a value it walks past is a credential in the DOM.
+func TestMaskStrings(t *testing.T) {
+	// Blanks every string it is offered, so the tests read as "what counted as
+	// a value here, and what came back byte for byte".
+	blank := func(name, raw string) string { return "X" }
+
+	cases := []struct {
+		line, want string
+	}{
+		// Array shape, spacing and the trailing comment all survive.
+		{`key = ["one", "two"]  # rotating`, `key = ["X", "X"]  # rotating`},
+		{`key   =    "one"`, `key   =    "X"`},
+		{`key = 'literal'`, `key = 'X'`},
+		{`key = ""`, `key = "X"`},
+		// A continuation line of a multi-line array holds values with no name
+		// attached to them.
+		{`  "one",`, `  "X",`},
+		// Not values: a header, a comment, a blank, a number.
+		{`[dev]`, `[dev]`},
+		{`["quoted-id"]`, `["quoted-id"]`},
+		{`# key = ["one"]`, `# key = ["one"]`},
+		{``, ``},
+		{`max_per_hour = 5`, `max_per_hour = 5`},
+		// A '#' inside a string is part of the value, not the start of a comment.
+		{`password = "a#b"`, `password = "X"`},
+		// An unterminated string is what a truncated write leaves behind; the
+		// parser will reject the file, but the value still must not be shown.
+		{`key = "one`, `key = "X`},
+		// Where a multi-line string ends is unknowable from one line, so the
+		// rest of the line is one value rather than three guesses.
+		{`key = """one`, `key = """X`},
+	}
+	for _, c := range cases {
+		if got := string(MaskStrings([]byte(c.line), blank)); got != c.want {
+			t.Errorf("MaskStrings(%q) = %q, want %q", c.line, got, c.want)
+		}
+	}
+
+	// The name is what a caller decides policy on, so it has to arrive.
+	var names []string
+	MaskStrings([]byte(`key = ["one", "two"]`), func(name, raw string) string {
+		names = append(names, name)
+		return raw
+	})
+	if len(names) != 2 || names[0] != "key" || names[1] != "key" {
+		t.Errorf("names = %v, want key twice", names)
+	}
+
+	// Handing the raw text back is a no-op, whatever the line contains.
+	for _, line := range []string{`key = ["one", "two"]  # note`, `password = 'a#b'`, `  "one",`} {
+		keep := func(name, raw string) string { return raw }
+		if got := string(MaskStrings([]byte(line), keep)); got != line {
+			t.Errorf("identity mask changed %q to %q", line, got)
+		}
+	}
+}
+
 func TestHasTableHeader(t *testing.T) {
 	tests := []struct {
 		body string

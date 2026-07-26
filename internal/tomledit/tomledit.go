@@ -563,6 +563,77 @@ func keyOf(raw []byte) (string, bool) {
 	return k, true
 }
 
+// MaskStrings rewrites the string values in one physical line of TOML.
+//
+// The dashboard has to put config text in front of an operator — a settings
+// body, a confirmation diff — without putting a live credential there too, and
+// it must not reformat what it shows on the way. Collapsing an array to a
+// single mask loses the difference between a two-key rotation and a one-key
+// revoke, and dropping a trailing comment defeats the point of a diff that
+// exists to catch comment loss. So substitution is value-for-value, and every
+// other byte comes back unchanged.
+//
+// mask receives the line's bare key name and the raw text inside each string,
+// and returns what to show in its place; handing back the text unchanged leaves
+// it alone. The name is empty when the line cannot be read as an assignment —
+// most importantly a continuation line of a multi-line array, where the strings
+// are values but the field they belong to is on an earlier line. Those are
+// still offered to mask rather than skipped, because whether an unattributable
+// value is safe to show is the caller's policy: keys.toml is nothing but
+// credentials, channels.toml mostly is not.
+//
+// Table headers and comment lines hold no values and come back untouched, which
+// keeps this consistent with KeyLines — a commented-out assignment is not a
+// live setting.
+func MaskStrings(line []byte, mask func(name, raw string) string) []byte {
+	if kind, _, _ := classify(line); kind != kindOther {
+		return line
+	}
+	// Skip the left-hand side only when this really is an assignment. An '='
+	// inside a continuation line's string is not an assignment operator, and
+	// starting the scan past it would land mid-string and mistake the closing
+	// quote for an opening one.
+	i := 0
+	name, isAssign := keyOf(line)
+	if isAssign {
+		i = bytes.IndexByte(line, '=') + 1
+	}
+
+	out := make([]byte, 0, len(line))
+	out = append(out, line[:i]...)
+	for i < len(line) {
+		switch c := line[i]; {
+		case c == '#':
+			// A trailing comment is the operator's own note, not a value.
+			return append(out, line[i:]...)
+		case at(line, i, `"""`), at(line, i, "'''"):
+			// A multi-line string opens here and one line cannot tell where it
+			// ends, so the rest of the line is treated as a single value:
+			// half-masking a secret is worse than showing the delimiters.
+			out = append(out, line[i:i+3]...)
+			return append(out, mask(name, string(line[i+3:]))...)
+		case c == '"', c == '\'':
+			end := skipBasic(line, i)
+			if c == '\'' {
+				end = skipLiteral(line, i)
+			}
+			// An unterminated string has no closing quote to put back.
+			inner := end
+			if inner > i+1 && line[inner-1] == c {
+				inner--
+			}
+			out = append(out, c)
+			out = append(out, mask(name, string(line[i+1:inner]))...)
+			out = append(out, line[inner:end]...)
+			i = end
+		default:
+			out = append(out, c)
+			i++
+		}
+	}
+	return out
+}
+
 func splice(src []byte, start, end int, repl []byte) []byte {
 	out := make([]byte, 0, len(src)-(end-start)+len(repl))
 	out = append(out, src[:start]...)

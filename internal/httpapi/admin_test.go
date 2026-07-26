@@ -731,6 +731,155 @@ func TestPublicPagesLeakNothingWithTheDashboardEnabled(t *testing.T) {
 	}
 }
 
+// diffOf pulls out the rendered diff, so an assertion about what the diff shows
+// cannot be satisfied by the confirmation's own prose above it.
+func diffOf(t *testing.T, body string) string {
+	t.Helper()
+	start := strings.Index(body, `<div class="diff">`)
+	if start < 0 {
+		t.Fatalf("no diff on the page:\n%s", body)
+	}
+	end := strings.Index(body[start:], "</pre>")
+	if end < 0 {
+		t.Fatalf("unterminated diff:\n%s", body[start:])
+	}
+	return body[start : start+end]
+}
+
+// The confirmation diff is raw config text, and keys.toml is nothing but
+// credentials — including those of callers the operator is not touching, which
+// appear as unchanged context lines.
+func TestConfirmationDiffNeverShowsAKey(t *testing.T) {
+	s, keysPath, _ := adminServer(t)
+	const devKey = "nh_test_key_0123456789"
+
+	// A caller nobody is editing: its key is context in every diff of this file.
+	k, _ := etags(t, s)
+	adminPost(t, s, "/admin/callers", adminEmail, url.Values{"etag": {k}, "id": {"bystander"}})
+	bystander := mustCaller(t, keysPath, "bystander").Keys[0]
+
+	// Rotate so there are two keys and revoking one is legal.
+	k, _ = etags(t, s)
+	adminPost(t, s, "/admin/callers/dev/rotate", adminEmail, url.Values{"etag": {k}})
+	var rotated string
+	for _, key := range mustCaller(t, keysPath, "dev").Keys {
+		if key != devKey {
+			rotated = key
+		}
+	}
+	if rotated == "" {
+		t.Fatal("rotate did not add a second key")
+	}
+
+	for _, tc := range []struct {
+		path string
+		form url.Values
+	}{
+		{"/admin/callers/dev/revoke", url.Values{"prefix": {prefixOf(devKey)}}},
+		{"/admin/callers/dev/delete", url.Values{}},
+	} {
+		k, _ = etags(t, s)
+		tc.form.Set("etag", k)
+		rec := adminPost(t, s, tc.path, adminEmail, tc.form)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: %d %s", tc.path, rec.Code, rec.Body.String())
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, "Confirm") {
+			t.Fatalf("%s: no confirmation was shown", tc.path)
+		}
+		for _, key := range []string{devKey, rotated, bystander} {
+			if strings.Contains(body, key) {
+				t.Errorf("%s: the page shows the full key %s", tc.path, prefixOf(key))
+			}
+		}
+		d := diffOf(t, body)
+		// A diff nobody can match against the row that asked for the change is
+		// not a confirmation, so the prefix has to be in the diff itself.
+		if !strings.Contains(d, prefixOf(devKey)) {
+			t.Errorf("%s: the diff shows no key prefix:\n%s", tc.path, d)
+		}
+		// The grant half of the file is not a credential; blanking it would make
+		// the diff unreadable for the thing it is best placed to catch.
+		if !strings.Contains(d, "channels = [") || !strings.Contains(d, "ntfy") {
+			t.Errorf("%s: the diff masked the channel grants:\n%s", tc.path, d)
+		}
+	}
+}
+
+// The same hazard on the other file: a settings diff spans the whole of
+// channels.toml, so it carries every channel's credentials and not just the
+// edited one's.
+func TestConfirmationDiffMasksChannelCredentials(t *testing.T) {
+	s, _, _ := adminServer(t)
+
+	for _, tc := range []struct {
+		path string
+		form url.Values
+	}{
+		{"/admin/channels/ntfy/settings", url.Values{"body": {
+			"type = \"ntfy\"\r\nserver = \"http://127.0.0.1:1\"\r\ntopic = \"different\"\r\ntoken = \"••••••••\"\r\n"}}},
+		{"/admin/channels/ntfy/delete", url.Values{}},
+	} {
+		_, c := etags(t, s)
+		tc.form.Set("etag", c)
+		rec := adminPost(t, s, tc.path, adminEmail, tc.form)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: %d %s", tc.path, rec.Code, rec.Body.String())
+		}
+		body := rec.Body.String()
+		if strings.Contains(body, "s3cret-token") {
+			t.Errorf("%s: the page shows the live token", tc.path)
+		}
+		d := diffOf(t, body)
+		if !strings.Contains(d, "••••••••") {
+			t.Errorf("%s: the token line is not masked in the diff:\n%s", tc.path, d)
+		}
+		// Only credentials go: an operator reviewing a channels diff is reading
+		// the settings.
+		if !strings.Contains(d, "127.0.0.1") {
+			t.Errorf("%s: the diff masked a setting that is not a credential:\n%s", tc.path, d)
+		}
+	}
+}
+
+// Masking the two files before diffing them, rather than masking the rendering,
+// would compare two identical masked files and tell the operator there was
+// nothing to change while their new credential sat unapplied.
+func TestChangingACredentialStillPreviewsAsAChange(t *testing.T) {
+	s, _, chansPath := adminServer(t)
+	before := read(t, chansPath)
+	_, c := etags(t, s)
+
+	rec := adminPost(t, s, "/admin/channels/ntfy/settings", adminEmail, url.Values{
+		"etag": {c},
+		"body": {"type = \"ntfy\"\r\nserver = \"http://127.0.0.1:1\"\r\ntopic = \"tst\"\r\ntoken = \"brand-new-token\"\r\n"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("preview: %d %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "Nothing to change") {
+		t.Fatal("a changed credential was diffed as no change at all")
+	}
+	d := diffOf(t, body)
+	if strings.Contains(d, "brand-new-token") {
+		t.Errorf("the diff shows the new credential in full:\n%s", d)
+	}
+	if !strings.Contains(d, "− token") || !strings.Contains(d, "+ token") {
+		t.Errorf("the diff does not show the token line changing:\n%s", d)
+	}
+	// The operator's own submission does come back, once, in the hidden field
+	// that Apply reads on confirm. That is the value they typed into this page a
+	// moment ago; every other appearance would be a leak.
+	if n := strings.Count(body, "brand-new-token"); n != 1 {
+		t.Errorf("the new credential appears %d times on the page, want once", n)
+	}
+	if read(t, chansPath) != before {
+		t.Error("the preview step already wrote the change")
+	}
+}
+
 func TestDashboardIsNotCacheable(t *testing.T) {
 	s, _, _ := adminServer(t)
 	rec := adminGet(t, s, "/admin", adminEmail)

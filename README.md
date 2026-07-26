@@ -476,11 +476,14 @@ Notes on how it treats your files, since they hold every credential you have:
   file moved underneath you the save is a `409` and your change is not applied.
 - **Destructive and freeform edits show a diff first.** Nothing structural can
   detect a lost comment — a comment has no semantics — so you get to see
-  `−40 +2` before you agree to it.
+  `−40 +2` before you agree to it. The diff is masked as well: a bearer key
+  shows as its prefix and a channel credential as `••••••••`, on the unchanged
+  lines your edit sits between as much as on the changed ones.
 - **A key is shown once, when it is created.** After that only a prefix. Rotate
   rather than recover.
 - **Credentials render masked** in the settings editor; leave the mask alone to
-  keep the value on disk. They are never sent to the browser.
+  keep the value on disk. Nothing already on disk is sent to the browser; a new
+  value you type comes back once, in the confirmation form that applies it.
 - **Every change is logged** to the delivery log as `kind: "admin"`, with the
   address that made it, and counted in `notify_admin_changes_total`.
 
