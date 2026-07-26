@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # go-version-file keeps CI pinned to whatever go.mod asks for, so
+      # bumping the toolchain is a one-line change in one place.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt needed on:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      # -race is the run that matters here: the outbox is workers plus atomic
+      # config swaps, and a data race there is a lost or duplicated delivery.
+      - name: Test
+        run: go test -race ./...
+
+      # The deploy artefact is a static Linux binary; catching a
+      # cross-compilation break in CI beats catching it mid-deploy.
+      - name: Cross-compile for deploy target
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: 0
+        run: go build -o /dev/null .
