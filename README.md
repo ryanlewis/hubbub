@@ -444,6 +444,14 @@ keys, add/enable/disable/delete a channel, edit a channel's settings, and fire
 the test send. Everything it writes goes into the same `keys.toml` and
 `channels.toml` you edit by hand.
 
+Each half of the page names the other. A channel row lists the callers that may
+send to it, which is the blast radius of the Delete button beside it, and a
+caller's grants mark any channel that is currently paused — a grant on a
+disabled channel is live config that delivers nothing. The last key a caller
+holds cannot be revoked from the page: a caller with no key fails the load and
+takes every other caller down with it, so deleting the caller is the operation
+on offer instead.
+
 **Authentication is an identity provider, not a login hubbub rolled itself.**
 `auth = "exe-dev"` reads the `X-ExeDev-Email` header that exe.dev's proxy
 injects, and bounces anonymous browsers through `/__exe.dev/login`. Only the

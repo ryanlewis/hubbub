@@ -125,6 +125,9 @@ type adminChannel struct {
 	Type    string
 	Enabled bool
 	Body    string // masked
+	// Grantees is who can currently send here. Shown on the row itself because
+	// it is the blast radius of the Delete button sitting next to it.
+	Grantees []string
 }
 
 type adminCaller struct {
@@ -142,6 +145,10 @@ type adminKey struct {
 type adminGrant struct {
 	Channel string
 	Granted bool
+	// Enabled is the channel's state, not the grant's. A grant on a disabled
+	// channel is live config that delivers nothing, which is worth saying next
+	// to the tick rather than leaving to be discovered from a delivery log.
+	Enabled bool
 }
 
 type newKeyView struct {
@@ -152,10 +159,15 @@ type newKeyView struct {
 type confirmView struct {
 	Title   string
 	Action  string
+	File    string // the config file the diff is of, named so the diff is placeable
 	Fields  map[string]string
 	Diff    []confedit.DiffLine
 	Added   int
 	Deleted int
+	// Destructive colours the Apply button as what it is. Set by the edits that
+	// remove something — a spool, a working key — rather than derived from the
+	// diff, because a settings save that changes one value also deletes a line.
+	Destructive bool
 }
 
 // --- rendering --------------------------------------------------------------
@@ -232,9 +244,24 @@ func (s *Server) fillAdminState(v *adminView) error {
 			ac.Keys = append(ac.Keys, adminKey{Prefix: prefixOf(k)})
 		}
 		for _, ch := range v.ChannelIDs {
-			ac.Grants = append(ac.Grants, adminGrant{Channel: ch, Granted: c.Permitted(ch)})
+			g := adminGrant{Channel: ch, Granted: c.Permitted(ch)}
+			if lc, ok := live.Get(ch); ok {
+				g.Enabled = lc.Enabled
+			}
+			ac.Grants = append(ac.Grants, g)
 		}
 		v.Callers = append(v.Callers, ac)
+	}
+
+	// Second pass: the same grants read the other way round. From the file, not
+	// s.Store.Keyring(), so both halves of the page agree — the store can lag a
+	// grant the operator saved a moment ago by up to one poll.
+	for i := range v.Channels {
+		for _, c := range ring.Callers() {
+			if c.Permitted(v.Channels[i].ID) {
+				v.Channels[i].Grantees = append(v.Channels[i].Grantees, c.ID)
+			}
+		}
 	}
 	return nil
 }

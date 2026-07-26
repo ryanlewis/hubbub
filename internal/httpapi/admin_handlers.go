@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -64,6 +65,9 @@ func (s *Server) preview(w http.ResponseWriter, r *http.Request, f *confedit.Fil
 	}
 	cv.Diff = maskDiff(d, s.maskFor(f))
 	cv.Added, cv.Deleted = confedit.Counts(d)
+	// Taken from the file rather than passed in, so a new confirmation cannot
+	// label its diff with the wrong file by forgetting a field.
+	cv.File = filepath.Base(f.Path)
 	if cv.Fields == nil {
 		cv.Fields = map[string]string{}
 	}
@@ -213,8 +217,9 @@ func (s *Server) handleChannelDelete(w http.ResponseWriter, r *http.Request) {
 		warn += fmt.Sprintf(" Still granted to: %s.", strings.Join(holders, ", "))
 	}
 	if s.preview(w, r, s.Admin.Channels, etag, edit, confirmView{
-		Title:  title + warn,
-		Action: "/admin/channels/" + id + "/delete",
+		Title:       title + warn,
+		Action:      "/admin/channels/" + id + "/delete",
+		Destructive: true,
 	}) {
 		return
 	}
@@ -431,9 +436,10 @@ func (s *Server) handleCallerRevoke(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.preview(w, r, s.Admin.Keys, etag, edit, confirmView{
-		Title:  fmt.Sprintf("Revoke key %s from %q? Anything still using it starts getting 401s within seconds.", prefix, id),
-		Action: "/admin/callers/" + id + "/revoke",
-		Fields: map[string]string{"prefix": prefix},
+		Title:       fmt.Sprintf("Revoke key %s from %q? Anything still using it starts getting 401s within seconds.", prefix, id),
+		Action:      "/admin/callers/" + id + "/revoke",
+		Fields:      map[string]string{"prefix": prefix},
+		Destructive: true,
 	}) {
 		return
 	}
@@ -457,8 +463,9 @@ func (s *Server) handleCallerDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.preview(w, r, s.Admin.Keys, etag, edit, confirmView{
-		Title:  fmt.Sprintf("Delete caller %q? Every key it holds stops working immediately.", id),
-		Action: "/admin/callers/" + id + "/delete",
+		Title:       fmt.Sprintf("Delete caller %q? Every key it holds stops working immediately.", id),
+		Action:      "/admin/callers/" + id + "/delete",
+		Destructive: true,
 	}) {
 		return
 	}

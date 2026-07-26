@@ -10,7 +10,7 @@
 {{template "theme"}}
 {{template "navstyle"}}
 body {
-  max-width: 60rem;
+  max-width: 62rem;
   margin: 0 auto;
   padding: 2.5rem 1.25rem 5rem;
 }
@@ -36,15 +36,37 @@ header.top .sitenav { margin-right: auto; }
   border-radius: 999px;
   padding: 0.1rem 0.55rem;
 }
+
+/* --- sections ------------------------------------------------------------ */
+
+section { margin-top: 2.75rem; }
 h2 {
-  margin: 2.5rem 0 1rem;
-  padding-top: 1rem;
+  margin: 0;
+  padding-top: 1.25rem;
   border-top: 1px solid var(--rule);
   font-size: 1rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
 }
+.count {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
+  opacity: 0.7;
+}
+/* The one place each concept is explained. Repeating it per card — which is
+   where these sentences started — turns three rows into three paragraphs of
+   the same advice. */
+.lede {
+  margin: 0.5rem 0 1.15rem;
+  max-width: 48rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+/* --- banners ------------------------------------------------------------- */
+
 .banner {
   margin: 1.25rem 0;
   padding: 0.75rem 1rem;
@@ -55,57 +77,139 @@ h2 {
 }
 .banner.ok { border-left-color: var(--ok); }
 .banner.err { border-left-color: var(--err); }
+
+/* --- cards --------------------------------------------------------------- */
+
 .card {
   border: 1px solid var(--rule);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--panel);
-  padding: 1rem 1.15rem;
-  margin-bottom: 0.85rem;
+  padding: 0.95rem 1.15rem;
+  margin-bottom: 0.7rem;
 }
-.card h3 {
-  margin: 0;
-  font-size: 1rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-.row {
+.card.editing { border-color: var(--accent); }
+/* A paused channel should read as parked, not broken: the name dims, the card
+   does not go red. */
+.card.off h3 { color: var(--muted); }
+.head {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 0.9rem;
   align-items: center;
   justify-content: space-between;
 }
-.meta { color: var(--muted); font-size: 0.8125rem; }
+.ident { display: flex; align-items: center; gap: 0.55rem; min-width: 0; }
+.card h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+.dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex: none;
+  background: var(--muted);
+  opacity: 0.5;
+}
+.dot.on { background: var(--ok); opacity: 1; }
+/* The adapter type belongs beside the name it qualifies. On the right, next to
+   the status, "ntfy  enabled" read as two states rather than a kind and a
+   state — and for the channel most people call `ntfy` it read as a duplicate. */
+.tag {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.6875rem;
+  color: var(--muted);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.05rem 0.4rem;
+}
 .pill {
   font-size: 0.75rem;
   border-radius: 999px;
   padding: 0.1rem 0.55rem;
   border: 1px solid var(--rule);
+  white-space: nowrap;
 }
-.pill.on { color: var(--ok); border-color: var(--ok); }
+.pill.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
 .pill.off { color: var(--muted); }
+.meta { color: var(--muted); font-size: 0.8125rem; }
+.rel { margin: 0.55rem 0 0; color: var(--muted); font-size: 0.8125rem; }
+.rel b { color: var(--fg); font-weight: 500; }
+
+/* --- controls ------------------------------------------------------------ */
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.9rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.9rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--rule);
+}
+.grp { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
 form.inline { display: inline; }
-button {
+
+.btn {
+  display: inline-block;
   font: inherit;
   font-size: 0.8125rem;
+  line-height: 1.5;
   padding: 0.3rem 0.7rem;
   border: 1px solid var(--rule);
   border-radius: 5px;
   background: var(--bg);
   color: var(--fg);
+  text-decoration: none;
   cursor: pointer;
 }
-button:hover { border-color: var(--accent); color: var(--accent); }
-button.danger:hover { border-color: var(--err); color: var(--err); }
-button.primary { border-color: var(--accent); color: var(--accent); }
+.btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+}
+.btn.primary {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  font-weight: 600;
+}
+/* Destructive actions recede until reached for. They sit in the same rows as
+   the routine ones, and a Delete with the same weight as Send test is an
+   invitation to misclick. */
+.btn.quiet { border-color: transparent; background: none; color: var(--muted); }
+.btn.danger:hover {
+  border-color: var(--err);
+  color: var(--err);
+  background: color-mix(in srgb, var(--err) 10%, var(--bg));
+}
+/* The filled counterpart, for the one button that actually destroys something.
+   It is the last click before a spool is removed or a key stops working, and it
+   should not look like the same Apply that saves a topic. */
+.btn.destructive {
+  border-color: var(--err);
+  color: var(--err);
+  background: color-mix(in srgb, var(--err) 12%, var(--bg));
+  font-weight: 600;
+}
+.btn.destructive:hover { background: color-mix(in srgb, var(--err) 22%, var(--bg)); }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.btn[disabled]:hover { border-color: transparent; color: var(--muted); background: none; }
+
 input[type=text], select, textarea {
   font: inherit;
   font-size: 0.875rem;
-  padding: 0.3rem 0.5rem;
+  padding: 0.35rem 0.55rem;
   border: 1px solid var(--rule);
   border-radius: 5px;
   background: var(--bg);
   color: var(--fg);
 }
+input[type=text]:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 textarea {
   width: 100%;
   min-height: 11rem;
@@ -114,21 +218,105 @@ textarea {
   line-height: 1.5;
   margin: 0.6rem 0;
 }
-label.grant {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.875rem;
-  margin-right: 0.9rem;
-}
 code, .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.8125rem;
 }
-.keyline { display: flex; gap: 0.6rem; align-items: center; margin: 0.3rem 0; }
+.hint { color: var(--muted); font-size: 0.8125rem; margin-top: 0.4rem; }
+
+/* --- labelled groups inside a card --------------------------------------- */
+
+.field { margin-top: 1.05rem; }
+.flabel {
+  display: block;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+.keys { display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem; }
+.keyline { display: flex; gap: 0.4rem; align-items: center; }
+.keyline code {
+  background: var(--code-bg);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.25rem 0.5rem;
+}
+
+/* --- grants -------------------------------------------------------------- */
+
+.grants { display: flex; flex-wrap: wrap; gap: 0.4rem 0.5rem; align-items: center; }
+label.grant {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+  padding: 0.25rem 0.65rem 0.25rem 0.5rem;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  cursor: pointer;
+}
+label.grant input { accent-color: var(--ok); margin: 0; }
+/* Which channels a caller may reach should be answerable without reading the
+   tick marks one at a time. */
+label.grant:has(input:checked) {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+}
+label.grant:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* A grant on a paused channel is live config that delivers nothing, so it must
+   not read as green-means-working — this is the state where a caller looks
+   permitted and its notifications go nowhere. */
+label.grant .paused { font-size: 0.6875rem; color: var(--muted); }
+label.grant:has(input:checked):has(.paused) {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+}
+label.grant:has(input:checked):has(.paused) input { accent-color: var(--warn); }
+label.grant:has(input:checked) .paused { color: inherit; }
+.grants .save { margin-left: 0.35rem; }
+.unsaved { display: none; font-size: 0.8125rem; color: var(--accent); }
+.grants.dirty .unsaved { display: inline; }
+.grants.dirty .save {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  font-weight: 600;
+}
+
+/* --- add-new ------------------------------------------------------------- */
+
+/* Dashed, and collapsed once there is anything to collapse: as a plain card the
+   create form counted as a row, so two channels looked like three. */
+.adder {
+  border: 1px dashed var(--rule);
+  border-radius: 8px;
+  margin-top: 0.7rem;
+}
+.adder > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.6rem 1.15rem;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+.adder > summary::-webkit-details-marker { display: none; }
+.adder > summary:hover { color: var(--accent); }
+.adder[open] { border-style: solid; background: var(--panel); }
+.adder[open] > summary { border-bottom: 1px solid var(--rule); color: var(--fg); }
+.adder .inner { padding: 0.95rem 1.15rem; }
+.create { display: flex; flex-wrap: wrap; gap: 0.6rem 0.75rem; align-items: flex-end; }
+.create .flabel { margin-bottom: 0.3rem; }
+.create input[type=text] { min-width: 12rem; }
+
+/* --- one-time key -------------------------------------------------------- */
+
 .newkey {
   border: 1px solid var(--accent);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 1rem 1.15rem;
   margin: 1.25rem 0;
   background: var(--code-bg);
@@ -144,22 +332,34 @@ code, .mono {
   border-radius: 5px;
   background: var(--panel);
 }
-.diff {
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  overflow-x: auto;
-  margin: 0.85rem 0;
-  background: var(--code-bg);
+.nkfoot { display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; align-items: center; }
+.nkfoot .hint { margin: 0; }
+
+/* --- confirmation -------------------------------------------------------- */
+
+.ctitle { margin: 0 0 0.9rem; }
+.difframe { border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; margin: 0.85rem 0; }
+.diffhead {
+  display: flex;
+  gap: 0.9rem;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0.75rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
 }
-.diff pre { margin: 0; border: 0; border-radius: 0; background: none; padding: 0.6rem 0; }
-.diff .l { display: block; padding: 0 0.75rem; white-space: pre; }
+.diff { overflow-x: auto; background: var(--code-bg); }
+/* Zero on the <pre>, restored on the lines: each rendered line is a block, and
+   the newline the template leaves between them is preserved whitespace that
+   would otherwise draw a blank line of its own — double-spacing the diff. The
+   newline stays so that copying the block out still yields one line per line. */
+.diff pre { margin: 0; border: 0; border-radius: 0; background: none; padding: 0.6rem 0; line-height: 0; }
+.diff .l { display: block; padding: 0 0.75rem; white-space: pre; line-height: 1.55; }
 .diff .add { background: color-mix(in srgb, var(--ok) 16%, transparent); }
 .diff .del { background: color-mix(in srgb, var(--err) 16%, transparent); }
 .counts { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8125rem; }
 .counts .a { color: var(--ok); }
 .counts .d { color: var(--err); }
-.hint { color: var(--muted); font-size: 0.8125rem; margin-top: 0.4rem; }
-.create { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 </style>
 </head>
 <body>
@@ -175,10 +375,12 @@ code, .mono {
 
 {{if .NewKey}}
 <div class="newkey">
-  <strong>New key for {{.NewKey.CallerID}}</strong>
+  <span class="flabel">New key · {{.NewKey.CallerID}}</span>
   <code class="value" id="newkey">{{.NewKey.Key}}</code>
-  <button type="button" id="copykey">Copy</button>
-  <div class="hint">This is the only time it will be shown. It is not stored anywhere it can be read back — if you lose it, rotate.</div>
+  <div class="nkfoot">
+    <button type="button" id="copykey" class="btn primary">Copy</button>
+    <span class="hint">This is the only time it will be shown. It is not stored anywhere it can be read back — if you lose it, rotate.</span>
+  </div>
 </div>
 {{end}}
 
@@ -186,134 +388,203 @@ code, .mono {
 {{/* A confirmation replaces the dashboard rather than sitting inside it: the
      diff is the whole point of the step, and burying it under the usual page
      is how a "-40 lines" headline gets clicked past. */}}
+<section>
 <h2>Confirm</h2>
+<p class="lede">Nothing is written until you apply this.</p>
 <div class="card">
-  <p>{{.Confirm.Title}}</p>
-  <p class="counts"><span class="a">+{{.Confirm.Added}}</span> <span class="d">−{{.Confirm.Deleted}}</span> lines</p>
-  <div class="diff"><pre>{{range .Confirm.Diff}}{{if eq .Op 2}}<span class="l add">+ {{.Text}}</span>{{else if eq .Op 1}}<span class="l del">− {{.Text}}</span>{{else}}<span class="l">  {{.Text}}</span>{{end}}
+  <p class="ctitle">{{.Confirm.Title}}</p>
+  <div class="difframe">
+    <div class="diffhead">
+      <span class="mono">{{.Confirm.File}}</span>
+      <span class="counts"><span class="a">+{{.Confirm.Added}}</span> <span class="d">−{{.Confirm.Deleted}}</span> lines</span>
+    </div>
+    <div class="diff"><pre>{{range .Confirm.Diff}}{{if eq .Op 2}}<span class="l add">+ {{.Text}}</span>{{else if eq .Op 1}}<span class="l del">− {{.Text}}</span>{{else}}<span class="l">  {{.Text}}</span>{{end}}
 {{end}}</pre></div>
-  <form method="post" action="{{.Confirm.Action}}" class="inline">
-    <input type="hidden" name="confirm" value="1">
-    {{range $k, $v := .Confirm.Fields}}<input type="hidden" name="{{$k}}" value="{{$v}}">{{end}}
-    <button type="submit" class="primary">Apply</button>
-  </form>
-  <a href="/admin"><button type="button">Cancel</button></a>
+  </div>
+  <div class="grp">
+    <form method="post" action="{{.Confirm.Action}}" class="inline">
+      <input type="hidden" name="confirm" value="1">
+      {{range $k, $v := .Confirm.Fields}}<input type="hidden" name="{{$k}}" value="{{$v}}">{{end}}
+      <button type="submit" class="btn {{if .Confirm.Destructive}}destructive{{else}}primary{{end}}">Apply</button>
+    </form>
+    <a class="btn" href="/admin">Cancel</a>
+  </div>
 </div>
+</section>
 
 {{else}}
 
-<h2>Channels</h2>
+<section>
+<h2>Channels <span class="count">{{len .Channels}}</span></h2>
+<p class="lede">
+  Where notifications go. Disabling one is a pause, not a purge — the spool is
+  kept, so anything queued goes out when you enable it again. Deleting one
+  settles that backlog and removes the spool for good.
+</p>
+
 {{range .Channels}}
-<div class="card">
-  <div class="row">
-    <h3>{{.ID}}</h3>
-    <span>
-      <span class="meta">{{.Type}}</span>
-      {{if .Enabled}}<span class="pill on">enabled</span>{{else}}<span class="pill off">disabled</span>{{end}}
+<div class="card{{if not .Enabled}} off{{end}}{{if eq $.Editing .ID}} editing{{end}}" id="ch-{{.ID}}">
+  <div class="head">
+    <span class="ident">
+      <span class="dot{{if .Enabled}} on{{end}}"></span>
+      <h3>{{.ID}}</h3>
+      {{if .Type}}<span class="tag">{{.Type}}</span>{{end}}
     </span>
+    {{if .Enabled}}<span class="pill on">enabled</span>{{else}}<span class="pill off">disabled</span>{{end}}
   </div>
-  <div class="row" style="margin-top:0.7rem">
-    <span>
+
+  {{/* The blast radius of the Delete button below, spelled out before it is
+       pressed rather than in the confirmation after. */}}
+  <p class="rel">{{if .Grantees}}Granted to {{range $i, $c := .Grantees}}{{if $i}}, {{end}}<b>{{$c}}</b>{{end}}.{{else}}No caller can send here yet.{{end}}</p>
+
+  <div class="actions">
+    <span class="grp">
+      {{if .Enabled}}
+      <form method="post" action="/admin/channels/{{.ID}}/test" class="inline">
+        <button type="submit" class="btn">Send test</button>
+      </form>
+      {{end}}
+      <a class="btn" href="/admin?edit={{.ID}}#ch-{{.ID}}">Settings</a>
       <form method="post" action="/admin/channels/{{.ID}}/toggle" class="inline">
         <input type="hidden" name="etag" value="{{$.ChansETag}}">
         <input type="hidden" name="enable" value="{{if .Enabled}}0{{else}}1{{end}}">
-        <button type="submit">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
+        <button type="submit" class="btn">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
       </form>
-      {{if .Enabled}}
-      <form method="post" action="/admin/channels/{{.ID}}/test" class="inline">
-        <button type="submit">Send test</button>
-      </form>
-      {{end}}
-      <a href="/admin?edit={{.ID}}"><button type="button">Settings</button></a>
     </span>
     <form method="post" action="/admin/channels/{{.ID}}/delete" class="inline">
       <input type="hidden" name="etag" value="{{$.ChansETag}}">
-      <button type="submit" class="danger">Delete</button>
+      <button type="submit" class="btn quiet danger" aria-label="Delete channel {{.ID}}">Delete</button>
     </form>
   </div>
 
   {{if eq $.Editing .ID}}
-  <form method="post" action="/admin/channels/{{.ID}}/settings">
-    <input type="hidden" name="etag" value="{{$.ChansETag}}">
-    <textarea name="body" spellcheck="false" autocapitalize="off" autocorrect="off">{{.Body}}</textarea>
-    <button type="submit" class="primary">Review change</button>
-    <a href="/admin"><button type="button">Close</button></a>
-    <div class="hint">Credentials show as ••••••••; leave one alone to keep the value on disk. The <code>[{{.ID}}]</code> header is not editable here — renaming a channel would delete its spool.</div>
-  </form>
+  <div class="field">
+    <span class="flabel">Settings · channels.toml</span>
+    <form method="post" action="/admin/channels/{{.ID}}/settings">
+      <input type="hidden" name="etag" value="{{$.ChansETag}}">
+      <textarea name="body" spellcheck="false" autocapitalize="off" autocorrect="off" aria-label="Settings for {{.ID}}">{{.Body}}</textarea>
+      <span class="grp">
+        <button type="submit" class="btn primary">Review change</button>
+        <a class="btn" href="/admin#ch-{{.ID}}">Close</a>
+      </span>
+      <p class="hint">Credentials show as ••••••••; leave one alone to keep the value on disk. The <code>[{{.ID}}]</code> header is not editable here — renaming a channel would delete its spool.</p>
+    </form>
+  </div>
   {{end}}
 </div>
 {{else}}
-<div class="card"><span class="meta">No channels configured.</span></div>
+<div class="card"><span class="meta">No channels yet. Add one below, fill in its settings, then enable it.</span></div>
 {{end}}
 
-<div class="card">
-  <form method="post" action="/admin/channels" class="create">
-    <input type="hidden" name="etag" value="{{.ChansETag}}">
-    <input type="text" name="id" placeholder="channel id" required>
-    <select name="type">{{range .Types}}<option value="{{.}}">{{.}}</option>{{end}}</select>
-    <button type="submit">Add channel</button>
-    <span class="hint">Created disabled, with no settings yet.</span>
-  </form>
-</div>
+<details class="adder"{{if not .Channels}} open{{end}}>
+  <summary>+ Add a channel</summary>
+  <div class="inner">
+    <form method="post" action="/admin/channels" class="create">
+      <input type="hidden" name="etag" value="{{.ChansETag}}">
+      <label>
+        <span class="flabel">Channel id</span>
+        <input type="text" name="id" placeholder="e.g. phone" required>
+      </label>
+      <label>
+        <span class="flabel">Adapter</span>
+        <select name="type">{{range .Types}}<option value="{{.}}">{{.}}</option>{{end}}</select>
+      </label>
+      <button type="submit" class="btn primary">Add channel</button>
+    </form>
+    <p class="hint">Created disabled, with no settings yet.</p>
+  </div>
+</details>
+</section>
 
-<h2>Callers</h2>
+<section>
+<h2>Callers <span class="count">{{len .Callers}}</span></h2>
+<p class="lede">
+  The machines allowed to post to <code>/v1/notify</code>, and what each one may
+  reach. A key is shown once, when it is minted. Rotating adds a second key
+  without removing the first — move the caller over, then revoke the old one.
+</p>
+
 {{range .Callers}}
 {{/* $ is the page, not this caller, so the nested key range needs its own
      handle on the row it belongs to. */}}
 {{$caller := .}}
-<div class="card">
-  <div class="row">
-    <h3>{{.ID}}</h3>
+<div class="card" id="cl-{{.ID}}">
+  <div class="head">
+    <span class="ident"><h3>{{.ID}}</h3></span>
     <form method="post" action="/admin/callers/{{.ID}}/delete" class="inline">
       <input type="hidden" name="etag" value="{{$.KeysETag}}">
-      <button type="submit" class="danger">Delete caller</button>
+      <button type="submit" class="btn quiet danger" aria-label="Delete caller {{.ID}}">Delete caller</button>
     </form>
   </div>
 
-  {{range .Keys}}
-  <div class="keyline">
-    <code>{{.Prefix}}</code>
-    <form method="post" action="/admin/callers/{{$caller.ID}}/revoke" class="inline">
+  <div class="field">
+    <span class="flabel">Keys</span>
+    <div class="keys">
+      {{range .Keys}}
+      <div class="keyline">
+        <code>{{.Prefix}}</code>
+        <form method="post" action="/admin/callers/{{$caller.ID}}/revoke" class="inline">
+          <input type="hidden" name="etag" value="{{$.KeysETag}}">
+          <input type="hidden" name="prefix" value="{{.Prefix}}">
+          {{/* The last key cannot be revoked — the caller would fail the load and
+               take every other caller down with it — so the button says so up
+               front instead of offering a click that only ever returns an error. */}}
+          <button type="submit" class="btn quiet danger" aria-label="Revoke key {{.Prefix}} from {{$caller.ID}}"{{if eq (len $caller.Keys) 1}} disabled title="This is the only key {{$caller.ID}} has. Rotate first, or delete the caller."{{end}}>Revoke</button>
+        </form>
+      </div>
+      {{end}}
+      <form method="post" action="/admin/callers/{{.ID}}/rotate" class="inline">
+        <input type="hidden" name="etag" value="{{$.KeysETag}}">
+        <button type="submit" class="btn">+ Add a key (rotate)</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="field">
+    <span class="flabel">Can send to</span>
+    <form method="post" action="/admin/callers/{{.ID}}/grants" class="grants" data-grants>
       <input type="hidden" name="etag" value="{{$.KeysETag}}">
-      <input type="hidden" name="prefix" value="{{.Prefix}}">
-      <button type="submit" class="danger">Revoke</button>
+      {{range .Grants}}
+      <label class="grant">
+        <input type="checkbox" name="channel" value="{{.Channel}}"{{if .Granted}} checked{{end}}>
+        {{.Channel}}{{if not .Enabled}} <span class="paused">paused</span>{{end}}
+      </label>
+      {{else}}
+      <span class="meta">No channels to grant yet.</span>
+      {{end}}
+      <button type="submit" class="btn save">Save grants</button>
+      <span class="unsaved">unsaved</span>
     </form>
   </div>
-  {{end}}
-
-  <form method="post" action="/admin/callers/{{.ID}}/rotate" class="inline">
-    <input type="hidden" name="etag" value="{{$.KeysETag}}">
-    <button type="submit">Add a key (rotate)</button>
-  </form>
-
-  <form method="post" action="/admin/callers/{{.ID}}/grants" style="margin-top:0.8rem">
-    <input type="hidden" name="etag" value="{{$.KeysETag}}">
-    {{range .Grants}}
-    <label class="grant"><input type="checkbox" name="channel" value="{{.Channel}}"{{if .Granted}} checked{{end}}> {{.Channel}}</label>
-    {{else}}
-    <span class="meta">No channels to grant yet.</span>
-    {{end}}
-    <button type="submit">Save grants</button>
-  </form>
 </div>
 {{else}}
-<div class="card"><span class="meta">No callers configured.</span></div>
+<div class="card"><span class="meta">No callers yet. Add one below to mint its first key.</span></div>
 {{end}}
 
-<div class="card">
-  <form method="post" action="/admin/callers" class="create">
-    <input type="hidden" name="etag" value="{{.KeysETag}}">
-    <input type="text" name="id" placeholder="caller id" required>
-    <button type="submit">Add caller</button>
-    <span class="hint">Generates a key, shown once, and grants nothing.</span>
-  </form>
-</div>
+<details class="adder"{{if not .Callers}} open{{end}}>
+  <summary>+ Add a caller</summary>
+  <div class="inner">
+    <form method="post" action="/admin/callers" class="create">
+      <input type="hidden" name="etag" value="{{.KeysETag}}">
+      <label>
+        <span class="flabel">Caller id</span>
+        <input type="text" name="id" placeholder="e.g. backup-cron" required>
+      </label>
+      <button type="submit" class="btn primary">Add caller</button>
+    </form>
+    <p class="hint">Generates a key, shown once, and grants nothing.</p>
+  </div>
+</details>
+</section>
 
 {{end}}
 
 <script nonce="{{.Nonce}}">
-// The only script on the page. Copying a key by hand from a monospace blob is
-// exactly where a transcription error turns into a confusing 401 later.
+// The only script on the page, and nothing here is load-bearing: without it the
+// forms still post and still save.
+
+// Copying a key by hand from a monospace blob is exactly where a transcription
+// error turns into a confusing 401 later.
 document.getElementById('copykey')?.addEventListener('click', function () {
   const el = document.getElementById('newkey');
   navigator.clipboard.writeText(el.textContent).then(() => {
@@ -321,6 +592,12 @@ document.getElementById('copykey')?.addEventListener('click', function () {
     setTimeout(() => { this.textContent = 'Copy'; }, 1500);
   });
 });
+
+// A ticked box looks saved. It is not — grants only change on submit — so the
+// form says so from the first change until the page reloads.
+for (const form of document.querySelectorAll('[data-grants]')) {
+  form.addEventListener('change', () => form.classList.add('dirty'));
+}
 </script>
 </body>
 </html>
