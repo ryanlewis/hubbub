@@ -14,7 +14,7 @@ import (
 // the shared colour tokens, so a palette change lands on every page at once
 // instead of being reapplied by hand to whichever ones someone remembers.
 //
-//go:embed index.html docs.html theme.html llms.txt
+//go:embed index.html docs.html admin.html theme.html llms.txt
 var pages embed.FS
 
 // Embedded separately from pages: it is served as bytes, never templated, and
@@ -39,7 +39,7 @@ type pageData struct {
 // TestLandingTemplatesParse is what keeps it out of a shipped binary.
 var (
 	htmlPages = sync.OnceValues(func() (*htmltmpl.Template, error) {
-		return htmltmpl.ParseFS(pages, "theme.html", "index.html", "docs.html")
+		return htmltmpl.ParseFS(pages, "theme.html", "index.html", "docs.html", "admin.html")
 	})
 	llmsTmpl = sync.OnceValues(func() (*texttmpl.Template, error) {
 		return texttmpl.ParseFS(pages, "llms.txt")
@@ -100,6 +100,14 @@ func handleFavicon(w http.ResponseWriter, r *http.Request) {
 func renderPageTemplate(w http.ResponseWriter, tmpl interface {
 	ExecuteTemplate(w io.Writer, name string, data any) error
 }, name string, data any, contentType string) {
+	renderPageTemplateStatus(w, tmpl, name, data, contentType, http.StatusOK)
+}
+
+// renderPageTemplateStatus is renderPageTemplate with the status spelled out,
+// for pages that answer a failed form post with the page itself.
+func renderPageTemplateStatus(w http.ResponseWriter, tmpl interface {
+	ExecuteTemplate(w io.Writer, name string, data any) error
+}, name string, data any, contentType string, status int) {
 	// Rendered into a buffer rather than straight into the ResponseWriter: the
 	// first byte written commits a 200, so a template error midway through would
 	// hand back a truncated page that had already claimed success.
@@ -109,6 +117,6 @@ func renderPageTemplate(w http.ResponseWriter, tmpl interface {
 		return
 	}
 	w.Header().Set("Content-Type", contentType)
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(status)
 	_, _ = w.Write(buf.Bytes())
 }

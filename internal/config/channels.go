@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"sort"
 
 	"github.com/BurntSushi/toml"
@@ -59,13 +60,17 @@ type channelEnvelope struct {
 // the hub might land on, with room to spare.
 const maxChannelIDLen = 64
 
-// validChannelID rejects any id that isn't a single, safe path component.
+// ValidChannelID rejects any id that isn't a single, safe path component.
+// Exported because the admin dashboard has to run this check on an
+// operator-supplied id *before* writing it: the check is the difference
+// between creating a channel and deleting the config directory.
+//
 // The id is the spool directory name (`spool/<id>/`), so ".." would point a
 // channel's spool at the config directory — whose files the drain scan then
 // parses as zero-valued, long-expired items and deletes, taking keys.toml and
 // channels.toml with them. A separator anywhere is enough to strand a spool
 // outside the tree the engine reconciles.
-func validChannelID(id string) error {
+func ValidChannelID(id string) error {
 	switch {
 	case id == "":
 		return fmt.Errorf("channel id must not be empty")
@@ -94,26 +99,37 @@ func validChannelID(id string) error {
 // its now-stale settings, and that edit must not take the whole file — and
 // with it every healthy channel — down with it.
 func LoadChannels(path string) (*ChannelSet, error) {
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return ParseChannels(src, path)
+}
+
+// ParseChannels parses a channels file held in memory, reporting errors
+// against name. See ParseKeys for why validation never goes through a temp
+// file: this one would leave SMTP passwords behind rather than bearer keys.
+func ParseChannels(src []byte, name string) (*ChannelSet, error) {
 	// Primitive defers each block's decode until we know which adapter owns
 	// it. The metadata tracks what every deferred decode consumed, so the
 	// unknown-key check at the end still covers adapter settings.
 	var entries map[string]toml.Primitive
-	md, err := toml.DecodeFile(path, &entries)
+	md, err := toml.Decode(string(src), &entries)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+		return nil, fmt.Errorf("%s: %w", name, err)
 	}
 
 	set := &ChannelSet{byID: make(map[string]*Channel, len(entries))}
 	for id, prim := range entries {
-		if err := validChannelID(id); err != nil {
-			return nil, fmt.Errorf("%s: channel %q: %w", path, id, err)
+		if err := ValidChannelID(id); err != nil {
+			return nil, fmt.Errorf("%s: channel %q: %w", name, id, err)
 		}
 		var env channelEnvelope
 		if err := md.PrimitiveDecode(prim, &env); err != nil {
-			return nil, fmt.Errorf("%s: channel %q: %w", path, id, err)
+			return nil, fmt.Errorf("%s: channel %q: %w", name, id, err)
 		}
 		if env.Type == "" {
-			return nil, fmt.Errorf("%s: channel %q: missing type", path, id)
+			return nil, fmt.Errorf("%s: channel %q: missing type", name, id)
 		}
 		ch := &Channel{ID: id, Type: env.Type, Enabled: env.Enabled == nil || *env.Enabled}
 		if !ch.Enabled {
@@ -122,11 +138,11 @@ func LoadChannels(path string) (*ChannelSet, error) {
 			// so its settings don't read as unknown keys; a parked channel is
 			// deliberately not validated.
 			if !adapter.Known(env.Type) {
-				return nil, fmt.Errorf("%s: channel %q: unknown adapter type %q", path, id, env.Type)
+				return nil, fmt.Errorf("%s: channel %q: unknown adapter type %q", name, id, env.Type)
 			}
 			var parked map[string]any
 			if err := md.PrimitiveDecode(prim, &parked); err != nil {
-				return nil, fmt.Errorf("%s: channel %q: %w", path, id, err)
+				return nil, fmt.Errorf("%s: channel %q: %w", name, id, err)
 			}
 			set.byID[id] = ch
 			continue
@@ -134,14 +150,14 @@ func LoadChannels(path string) (*ChannelSet, error) {
 		decode := func(v any) error { return md.PrimitiveDecode(prim, v) }
 		a, err := adapter.New(env.Type, id, decode)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", path, err)
+			return nil, fmt.Errorf("%s: %w", name, err)
 		}
 		ch.Adapter = a
 		set.byID[id] = ch
 	}
 	// Runs after every deferred decode, so it catches a typo in an adapter's
 	// own settings as well as a stray top-level key.
-	if err := rejectUnknown(path, md); err != nil {
+	if err := rejectUnknown(name, md); err != nil {
 		return nil, err
 	}
 	return set, nil

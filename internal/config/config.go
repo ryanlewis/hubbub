@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/ryanlewis/hubbub/internal/adminauth"
 )
 
 // Duration is a time.Duration written as a string: interval = "2.5s". TOML has
@@ -42,9 +43,18 @@ type HeartbeatConfig struct {
 	Interval Duration `toml:"interval"`
 }
 
+// AdminConfig enables the admin dashboard. It has no port of its own: the
+// dashboard rides the public listener, because that is the only one the
+// deployment's proxy puts an identity in front of.
+type AdminConfig struct {
+	Auth          string   `toml:"auth"`
+	AllowedEmails []string `toml:"allowed_emails"`
+}
+
 type Config struct {
 	PublicPort         int              `toml:"public_port"`
-	Ops                *OpsConfig       `toml:"ops"` // presence-enabled
+	Ops                *OpsConfig       `toml:"ops"`   // presence-enabled
+	Admin              *AdminConfig     `toml:"admin"` // presence-enabled
 	RateCapPerHour     int              `toml:"rate_cap_per_hour"`
 	ResponseWindow     Duration         `toml:"response_window"`
 	QueueTTL           Duration         `toml:"queue_ttl"`
@@ -118,6 +128,21 @@ func LoadConfig(path string) (*Config, error) {
 		}
 		if cfg.Heartbeat.Interval.Duration <= 0 {
 			cfg.Heartbeat.Interval = Duration{60 * time.Second}
+		}
+	}
+	if cfg.Admin != nil {
+		if cfg.Admin.Auth == "" {
+			return nil, fmt.Errorf("%s: admin.auth is required when [admin] is set (known: %s)", path, strings.Join(adminauth.Names(), ", "))
+		}
+		if _, err := adminauth.New(cfg.Admin.Auth); err != nil {
+			return nil, fmt.Errorf("%s: admin: %w", path, err)
+		}
+		// The allowlist is checked here as well as in adminauth.NewGuard so
+		// the failure is a refusal to start rather than a dashboard that
+		// 403s everyone — an empty list is a half-written config, and the
+		// operator needs to hear about it at the same moment they made it.
+		if len(cfg.Admin.AllowedEmails) == 0 {
+			return nil, fmt.Errorf("%s: admin.allowed_emails must list at least one address; there is deliberately no \"allow everyone\"", path)
 		}
 	}
 	return cfg, nil

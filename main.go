@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ryanlewis/hubbub/internal/adminauth"
+	"github.com/ryanlewis/hubbub/internal/confedit"
 	"github.com/ryanlewis/hubbub/internal/config"
 	"github.com/ryanlewis/hubbub/internal/dlog"
 	"github.com/ryanlewis/hubbub/internal/heartbeat"
@@ -29,6 +31,33 @@ func main() {
 		slog.Error("fatal", "err", err)
 		os.Exit(1)
 	}
+}
+
+// buildAdmin assembles the dashboard's dependencies.
+//
+// The two editable files are handed the *real* loaders as validators, so a
+// candidate edit is checked by exactly the code that will have to load it
+// afterwards. Anything the dashboard accepts, the hub can read.
+func buildAdmin(cfg *config.Config) (*httpapi.Admin, error) {
+	provider, err := adminauth.New(cfg.Admin.Auth)
+	if err != nil {
+		return nil, err
+	}
+	guard, err := adminauth.NewGuard(provider, cfg.Admin.AllowedEmails)
+	if err != nil {
+		return nil, err
+	}
+	return &httpapi.Admin{
+		Guard: guard,
+		Keys: &confedit.File{Path: cfg.KeysFile, Validate: func(src []byte, name string) error {
+			_, err := config.ParseKeys(src, name)
+			return err
+		}},
+		Channels: &confedit.File{Path: cfg.ChannelsFile, Validate: func(src []byte, name string) error {
+			_, err := config.ParseChannels(src, name)
+			return err
+		}},
+	}, nil
 }
 
 func run(configPath string) error {
@@ -97,6 +126,26 @@ func run(configPath string) error {
 		Metrics: m,
 		Rate:    httpapi.NewRateLimiter(cfg.RateCapPerHour, time.Hour),
 		Window:  cfg.ResponseWindow.Duration,
+	}
+
+	if cfg.Admin != nil {
+		admin, err := buildAdmin(cfg)
+		if err != nil {
+			return fmt.Errorf("admin: %w", err)
+		}
+		srv.Admin = admin
+		// A crashed write can strand a temp file holding a bearer key or an
+		// SMTP password in the config directory, where nothing else would
+		// ever notice it.
+		for _, p := range confedit.SweepTemps(cfg.KeysFile, cfg.ChannelsFile) {
+			slog.Warn("removed a leftover config temp file from an interrupted admin write", "file", p)
+		}
+		slog.Info("admin dashboard enabled", "auth", cfg.Admin.Auth, "allowed", len(cfg.Admin.AllowedEmails))
+		// The provider trusts something it cannot verify by itself. Say so at
+		// every boot rather than leaving the assumption in a doc.
+		if w := admin.Guard.Provider.Warning(); w != "" {
+			slog.Warn(w)
+		}
 	}
 
 	// Explicit timeouts on both listeners: Go's zero-values are unlimited,

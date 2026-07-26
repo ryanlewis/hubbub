@@ -25,7 +25,13 @@ type Record struct {
 	Priority  string            `json:"priority,omitempty"`
 	Channel   string            `json:"channel,omitempty"` // terminal lines
 	Outcome   string            `json:"outcome,omitempty"` // terminal lines
-	Peer      string            `json:"peer,omitempty"`    // auth_fail lines
+	// admin lines: who changed what. The actor is an operator's own address
+	// from the admin identity provider, not a caller id — a permission change
+	// is worth being able to attribute months later, and the delivery log is
+	// already the file that survives restarts and gets rotated.
+	Actor     string            `json:"actor,omitempty"`
+	Action    string            `json:"action,omitempty"`
+	Peer      string            `json:"peer,omitempty"` // auth_fail lines
 	ClaimedIP string            `json:"claimedIp,omitempty"`
 	Detail    string            `json:"detail,omitempty"`
 }

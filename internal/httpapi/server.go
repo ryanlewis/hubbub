@@ -42,6 +42,9 @@ type Server struct {
 	Metrics *metrics.Metrics
 	Rate    *RateLimiter
 	Window  time.Duration
+	// Admin enables the dashboard. Nil means its routes are never registered,
+	// so a hub without an [admin] block does not serve them at all.
+	Admin *Admin
 }
 
 // PublicMux serves the caller-facing API.
@@ -68,6 +71,13 @@ func (s *Server) PublicMux() *http.ServeMux {
 	// The browsable reference. Rendered from the same resolved spec, so it can
 	// only ever show what /openapi.json already says.
 	mux.HandleFunc("GET /docs", s.handleDocs)
+	// The dashboard rides this listener because it is the only one the
+	// deployment's proxy puts an identity in front of — the ops port sits
+	// outside the proxy range and would receive no identity headers at all.
+	// Every route below is behind the admin guard; nothing here is public.
+	if s.Admin != nil {
+		s.adminRoutes(mux)
+	}
 	return mux
 }
 

@@ -30,10 +30,14 @@ type Store struct {
 	// OnChannelsChange is invoked (from the watch goroutine) after a
 	// successful channels reload, so the outbox can rebuild its workers.
 	OnChannelsChange func(*ChannelSet)
+
+	// reload wakes the watcher early. Buffered at 1 and sent to without
+	// blocking: a pending wake-up already covers any number of callers.
+	reload chan struct{}
 }
 
 func NewStore(cfg *Config) (*Store, error) {
-	s := &Store{cfg: cfg}
+	s := &Store{cfg: cfg, reload: make(chan struct{}, 1)}
 	ring, err := LoadKeys(cfg.KeysFile)
 	if err != nil {
 		return nil, err
@@ -63,7 +67,29 @@ func (s *Store) Watch(ctx context.Context, interval time.Duration) {
 			return
 		case <-t.C:
 			s.pollOnce()
+		case <-s.reload:
+			s.pollOnce()
 		}
+	}
+}
+
+// ReloadNow asks the watcher to poll immediately, so a change this process
+// just wrote is live in milliseconds rather than up to one poll interval
+// later.
+//
+// It signals rather than reloading inline, deliberately. Every mtime field on
+// Store is unsynchronised, and safe only because exactly one goroutine — the
+// watcher — ever touches them; calling pollOnce from an HTTP handler would
+// race those fields and could run two OnChannelsChange callbacks (and so two
+// Engine.SetChannels reconciles) concurrently, which today cannot happen.
+// Waking the owner keeps that property for free.
+//
+// Non-blocking: a wake-up already queued covers this caller too, and the
+// ticker is the backstop if no watcher is running at all.
+func (s *Store) ReloadNow() {
+	select {
+	case s.reload <- struct{}{}:
+	default:
 	}
 }
 

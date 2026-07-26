@@ -137,12 +137,18 @@ port = 2112
 [heartbeat]
 url = "https://hc-ping.com/..."
 interval = "60s"
+
+# Presence-enabled: delete the table and /admin is never registered.
+[admin]
+auth = "exe-dev"
+allowed_emails = ["you@example.com"]
 ```
 
 | Field | Default | Meaning |
 |---|---|---|
 | `public_port` | `8080` | Caller-facing API |
 | `[ops]` | *(absent)* | Presence-enabled. Brings up a second listener for `/metrics`, `/health` and the test CTA |
+| `[admin]` | *(absent)* | Presence-enabled. Serves the [dashboard](#the-dashboard) on the public listener. `allowed_emails` must name at least one address — there is no "allow everyone" |
 | `rate_cap_per_hour` | `60` | Global cap across all keys. Must be ≥ 1 — there is no "unlimited" |
 | `response_window` | `2.5s` | How long a request waits on delivery outcomes |
 | `queue_ttl` | `6h` | How long an undeliverable message stays queued before it's dropped |
@@ -427,6 +433,56 @@ reach. That placement *is* the access control — these carry no auth of their o
 | `GET /metrics` | Prometheus counters |
 | `POST /test/{channel}` | Fire a canned notification through one adapter, jumping the queue |
 
+## The dashboard
+
+`GET /admin` edits the two things that actually change over a hub's life —
+which channels are on, and which keys may use them — in a browser instead of
+over SSH. It is off unless `[admin]` is configured.
+
+It can create a caller and mint its key, edit channel grants, rotate and revoke
+keys, add/enable/disable/delete a channel, edit a channel's settings, and fire
+the test send. Everything it writes goes into the same `keys.toml` and
+`channels.toml` you edit by hand.
+
+**Authentication is an identity provider, not a login hubbub rolled itself.**
+`auth = "exe-dev"` reads the `X-ExeDev-Email` header that exe.dev's proxy
+injects, and bounces anonymous browsers through `/__exe.dev/login`. Only the
+addresses in `allowed_emails` get in; anyone else gets a 403 that names the
+address it refused, because being signed in as the wrong one of your own
+accounts is the usual cause.
+
+> **The `exe-dev` provider is only safe behind the exe.dev proxy.** It trusts a
+> header, and that trust holds because the proxy strips any copy a client
+> sends. Reach the port some other way — a local `go run`, a port exposed
+> around the proxy — and the header is whatever the caller says it is, so the
+> dashboard is whatever the caller says it is too. hubbub logs this warning at
+> every start rather than leaving it to be remembered.
+
+Notes on how it treats your files, since they hold every credential you have:
+
+- **Comments survive.** Edits are line-level splices, not a decode/re-encode
+  round trip, so the annotations you left next to a parked channel stay where
+  they are. Untouched regions come back byte-identical.
+- **It cannot write a file hubbub then fails to load.** Candidates are checked
+  by the real loader before anything lands; a rejected edit shows the loader's
+  own error and leaves the file alone.
+- **A concurrent hand-edit wins.** Each page carries a content hash; if the
+  file moved underneath you the save is a `409` and your change is not applied.
+- **Destructive and freeform edits show a diff first.** Nothing structural can
+  detect a lost comment — a comment has no semantics — so you get to see
+  `−40 +2` before you agree to it.
+- **A key is shown once, when it is created.** After that only a prefix. Rotate
+  rather than recover.
+- **Credentials render masked** in the settings editor; leave the mask alone to
+  keep the value on disk. They are never sent to the browser.
+- **Every change is logged** to the delivery log as `kind: "admin"`, with the
+  address that made it, and counted in `notify_admin_changes_total`.
+
+Two things it deliberately will not do: rename a channel (that reads to the
+outbox as *channel removed*, which settles the backlog and deletes the spool),
+and edit `hubbub.toml` (read once at startup, so an edit would silently not
+apply until a restart).
+
 ## Delivery guarantees
 
 - **At-least-once.** A caller that times out and retries may double-send. The
@@ -534,7 +590,9 @@ Two rules the codebase holds to:
 - [ ] Discord adapter
 - [ ] Per-key rate caps and idempotency keys
 - [ ] Bare-URL webhooks (`POST /hook/<token>`) for senders that can't set headers
-- [ ] `GET /v1/recent` and an `/admin` dashboard
+- [x] `/admin` dashboard — keys, grants and channel settings in a browser,
+      behind a pluggable identity provider (`exe-dev` first)
+- [ ] `GET /v1/recent` — a delivery-log view
 
 ## Prior art
 

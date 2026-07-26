@@ -35,6 +35,23 @@ channels_file = "example/channels.toml"
 [ops]
 port = 2112
 
+# The admin dashboard at /admin: edit key permissions and channel settings in a
+# browser instead of over SSH. Presence-enabled — delete this table and the
+# routes are never registered at all.
+#
+# It rides the public listener, because that is the only one a deployment's
+# proxy puts an identity in front of. THIS MATTERS: the exe-dev provider trusts
+# the X-ExeDev-Email header, which is only safe behind the exe.dev proxy, since
+# the proxy strips any copy a client sends. Reached directly — a local run, a
+# port exposed around the proxy — that header is whatever the caller says it
+# is, and so is the identity.
+#
+# allowed_emails has no "allow everyone": an empty list fails the load rather
+# than publishing key management to the internet.
+[admin]
+auth = "exe-dev"
+allowed_emails = ["you@example.com"]
+
 # Dead-man's switch. Any provider works — the URL is just pinged on a timer,
 # and each tick is gated on hubbub probing its own listener first, so a wedged
 # process trips the switch instead of staying invisibly green.

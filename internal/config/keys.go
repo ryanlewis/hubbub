@@ -2,6 +2,9 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"slices"
+	"sort"
 
 	"github.com/BurntSushi/toml"
 )
@@ -63,23 +66,71 @@ func (k *Keyring) Lookup(key string) (*Caller, bool) {
 
 const minKeyLen = 16 // bytes of the string; issued keys are ≥16 bytes of entropy
 
-func LoadKeys(path string) (*Keyring, error) {
-	var entries map[string]callerTOML
-	md, err := toml.DecodeFile(path, &entries)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+// maxCallerIDLen matches the channel-id cap; the id is a label, not a payload.
+const maxCallerIDLen = 64
+
+// validCallerID rejects any id that isn't a bare token.
+//
+// TOML would happily accept ["ops.team"], but a dotted id is indistinguishable
+// at a glance from [ops.team] — a sub-table, an entirely different thing — and
+// the admin dashboard locates a caller by matching its header in the file's
+// source text. Constraining ids here means that ambiguity can never arise.
+// The id also lands in every delivery-log line, so keeping it to plain
+// characters is worth something on its own.
+func validCallerID(id string) error {
+	switch {
+	case id == "":
+		return fmt.Errorf("caller id must not be empty")
+	case len(id) > maxCallerIDLen:
+		return fmt.Errorf("caller id is %d bytes; max %d", len(id), maxCallerIDLen)
 	}
-	if err := rejectUnknown(path, md); err != nil {
+	for _, r := range id {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '-' || r == '_':
+		default:
+			return fmt.Errorf("caller id may only contain letters, digits, '-' and '_'")
+		}
+	}
+	return nil
+}
+
+// LoadKeys reads and parses a keys file.
+func LoadKeys(path string) (*Keyring, error) {
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return ParseKeys(src, path)
+}
+
+// ParseKeys parses a keys file held in memory, reporting errors against name.
+//
+// Split out from LoadKeys so a candidate edit can be validated without going
+// near the filesystem. Validating through a temp file would leave a 0600 file
+// full of live bearer keys sitting in the config directory whenever the
+// process died between writing it and unlinking it — and it would report
+// failures against a path the operator has never seen.
+func ParseKeys(src []byte, name string) (*Keyring, error) {
+	var entries map[string]callerTOML
+	md, err := toml.Decode(string(src), &entries)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", name, err)
+	}
+	if err := rejectUnknown(name, md); err != nil {
 		return nil, err
 	}
 
 	ring := &Keyring{byKey: make(map[string]*Caller)}
 	for id, e := range entries {
+		if err := validCallerID(id); err != nil {
+			return nil, fmt.Errorf("%s: caller %q: %w", name, id, err)
+		}
 		if len(e.Key) == 0 && len(e.URLToken) == 0 {
-			return nil, fmt.Errorf("%s: caller %q has no key or url_token", path, id)
+			return nil, fmt.Errorf("%s: caller %q has no key or url_token", name, id)
 		}
 		if e.Channels == nil {
-			return nil, fmt.Errorf("%s: caller %q has no channels list", path, id)
+			return nil, fmt.Errorf("%s: caller %q has no channels list", name, id)
 		}
 		c := &Caller{
 			ID:         id,
@@ -91,10 +142,10 @@ func LoadKeys(path string) (*Keyring, error) {
 		}
 		for _, key := range e.Key {
 			if len(key) < minKeyLen {
-				return nil, fmt.Errorf("%s: caller %q has a key shorter than %d chars", path, id, minKeyLen)
+				return nil, fmt.Errorf("%s: caller %q has a key shorter than %d chars", name, id, minKeyLen)
 			}
 			if prev, dup := ring.byKey[key]; dup {
-				return nil, fmt.Errorf("%s: key shared by callers %q and %q", path, prev.ID, id)
+				return nil, fmt.Errorf("%s: key shared by callers %q and %q", name, prev.ID, id)
 			}
 			ring.byKey[key] = c
 		}
@@ -102,12 +153,27 @@ func LoadKeys(path string) (*Keyring, error) {
 	return ring, nil
 }
 
+// Callers returns every caller, sorted by id and deduplicated — the ring is
+// indexed by key, so a caller mid-rotation appears under two of them. The
+// admin dashboard needs the caller list, not the key list.
+func (k *Keyring) Callers() []*Caller {
+	seen := make(map[string]*Caller, len(k.byKey))
+	for _, c := range k.byKey {
+		seen[c.ID] = c
+	}
+	ids := make([]string, 0, len(seen))
+	for id := range seen {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]*Caller, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, seen[id])
+	}
+	return out
+}
+
 // Permitted reports whether the caller's permission boundary includes ch.
 func (c *Caller) Permitted(ch string) bool {
-	for _, p := range c.Channels {
-		if p == ch {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.Channels, ch)
 }

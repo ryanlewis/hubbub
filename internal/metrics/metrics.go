@@ -18,6 +18,9 @@ type Metrics struct {
 	requests   map[string]uint64    // by outcome
 	deliveries map[[2]string]uint64 // by channel, outcome
 	authFails  uint64
+	// adminChanges is by action; nil until the dashboard is used, so a hub
+	// without one exposes no admin series at all.
+	adminChanges map[string]uint64
 }
 
 func New() *Metrics {
@@ -46,6 +49,18 @@ func (m *Metrics) AuthFailure() {
 	m.authFails++
 }
 
+// AdminChange counts a config change made through the dashboard. The label is
+// the action name — a fixed, code-defined set — so the endpoint stays free of
+// caller ids and payload content like every other label here.
+func (m *Metrics) AdminChange(action string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.adminChanges == nil {
+		m.adminChanges = make(map[string]uint64)
+	}
+	m.adminChanges[action]++
+}
+
 func (m *Metrics) Render() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -71,6 +86,12 @@ func (m *Metrics) Render() string {
 	}
 	b.WriteString("# TYPE notify_auth_failures_total counter\n")
 	fmt.Fprintf(&b, "notify_auth_failures_total %d\n", m.authFails)
+	if len(m.adminChanges) > 0 {
+		b.WriteString("# TYPE notify_admin_changes_total counter\n")
+		for _, k := range sortedKeys(m.adminChanges) {
+			fmt.Fprintf(&b, "notify_admin_changes_total{action=%q} %d\n", k, m.adminChanges[k])
+		}
+	}
 	b.WriteString("# TYPE process_start_time_seconds gauge\n")
 	fmt.Fprintf(&b, "process_start_time_seconds %d\n", m.start.Unix())
 	return b.String()

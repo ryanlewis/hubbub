@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>hubbub admin</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style nonce="{{.Nonce}}">
+{{template "theme"}}
+body {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 5rem;
+}
+header.top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--rule);
+}
+header.top h1 { font-size: 1.25rem; margin: 0; }
+.who { color: var(--muted); font-size: 0.875rem; }
+.version {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  color: var(--muted);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+}
+h2 {
+  margin: 2.5rem 0 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule);
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.banner {
+  margin: 1.25rem 0;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--accent);
+  background: var(--code-bg);
+  border-radius: 0 4px 4px 0;
+  white-space: pre-wrap;
+}
+.banner.ok { border-left-color: var(--ok); }
+.banner.err { border-left-color: var(--err); }
+.card {
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--panel);
+  padding: 1rem 1.15rem;
+  margin-bottom: 0.85rem;
+}
+.card h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.9rem;
+  align-items: center;
+  justify-content: space-between;
+}
+.meta { color: var(--muted); font-size: 0.8125rem; }
+.pill {
+  font-size: 0.75rem;
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  border: 1px solid var(--rule);
+}
+.pill.on { color: var(--ok); border-color: var(--ok); }
+.pill.off { color: var(--muted); }
+form.inline { display: inline; }
+button {
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+button:hover { border-color: var(--accent); color: var(--accent); }
+button.danger:hover { border-color: var(--err); color: var(--err); }
+button.primary { border-color: var(--accent); color: var(--accent); }
+input[type=text], select, textarea {
+  font: inherit;
+  font-size: 0.875rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--fg);
+}
+textarea {
+  width: 100%;
+  min-height: 11rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  margin: 0.6rem 0;
+}
+label.grant {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.875rem;
+  margin-right: 0.9rem;
+}
+code, .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+}
+.keyline { display: flex; gap: 0.6rem; align-items: center; margin: 0.3rem 0; }
+.newkey {
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 1rem 1.15rem;
+  margin: 1.25rem 0;
+  background: var(--code-bg);
+}
+.newkey .value {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9375rem;
+  word-break: break-all;
+  margin: 0.6rem 0;
+  padding: 0.6rem;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--panel);
+}
+.diff {
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.85rem 0;
+  background: var(--code-bg);
+}
+.diff pre { margin: 0; border: 0; border-radius: 0; background: none; padding: 0.6rem 0; }
+.diff .l { display: block; padding: 0 0.75rem; white-space: pre; }
+.diff .add { background: color-mix(in srgb, var(--ok) 16%, transparent); }
+.diff .del { background: color-mix(in srgb, var(--err) 16%, transparent); }
+.counts { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8125rem; }
+.counts .a { color: var(--ok); }
+.counts .d { color: var(--err); }
+.hint { color: var(--muted); font-size: 0.8125rem; margin-top: 0.4rem; }
+.create { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>hubbub admin</h1>
+  <span class="who">{{.Actor}} · <span class="version">v{{.Version}}</span></span>
+</header>
+
+{{if .Error}}<div class="banner err">{{.Error}}</div>{{end}}
+{{if .Notice}}<div class="banner ok">{{.Notice}}</div>{{end}}
+
+{{if .NewKey}}
+<div class="newkey">
+  <strong>New key for {{.NewKey.CallerID}}</strong>
+  <code class="value" id="newkey">{{.NewKey.Key}}</code>
+  <button type="button" id="copykey">Copy</button>
+  <div class="hint">This is the only time it will be shown. It is not stored anywhere it can be read back — if you lose it, rotate.</div>
+</div>
+{{end}}
+
+{{if .Confirm}}
+{{/* A confirmation replaces the dashboard rather than sitting inside it: the
+     diff is the whole point of the step, and burying it under the usual page
+     is how a "-40 lines" headline gets clicked past. */}}
+<h2>Confirm</h2>
+<div class="card">
+  <p>{{.Confirm.Title}}</p>
+  <p class="counts"><span class="a">+{{.Confirm.Added}}</span> <span class="d">−{{.Confirm.Deleted}}</span> lines</p>
+  <div class="diff"><pre>{{range .Confirm.Diff}}{{if eq .Op 2}}<span class="l add">+ {{.Text}}</span>{{else if eq .Op 1}}<span class="l del">− {{.Text}}</span>{{else}}<span class="l">  {{.Text}}</span>{{end}}
+{{end}}</pre></div>
+  <form method="post" action="{{.Confirm.Action}}" class="inline">
+    <input type="hidden" name="confirm" value="1">
+    {{range $k, $v := .Confirm.Fields}}<input type="hidden" name="{{$k}}" value="{{$v}}">{{end}}
+    <button type="submit" class="primary">Apply</button>
+  </form>
+  <a href="/admin"><button type="button">Cancel</button></a>
+</div>
+
+{{else}}
+
+<h2>Channels</h2>
+{{range .Channels}}
+<div class="card">
+  <div class="row">
+    <h3>{{.ID}}</h3>
+    <span>
+      <span class="meta">{{.Type}}</span>
+      {{if .Enabled}}<span class="pill on">enabled</span>{{else}}<span class="pill off">disabled</span>{{end}}
+    </span>
+  </div>
+  <div class="row" style="margin-top:0.7rem">
+    <span>
+      <form method="post" action="/admin/channels/{{.ID}}/toggle" class="inline">
+        <input type="hidden" name="etag" value="{{$.ChansETag}}">
+        <input type="hidden" name="enable" value="{{if .Enabled}}0{{else}}1{{end}}">
+        <button type="submit">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
+      </form>
+      {{if .Enabled}}
+      <form method="post" action="/admin/channels/{{.ID}}/test" class="inline">
+        <button type="submit">Send test</button>
+      </form>
+      {{end}}
+      <a href="/admin?edit={{.ID}}"><button type="button">Settings</button></a>
+    </span>
+    <form method="post" action="/admin/channels/{{.ID}}/delete" class="inline">
+      <input type="hidden" name="etag" value="{{$.ChansETag}}">
+      <button type="submit" class="danger">Delete</button>
+    </form>
+  </div>
+
+  {{if eq $.Editing .ID}}
+  <form method="post" action="/admin/channels/{{.ID}}/settings">
+    <input type="hidden" name="etag" value="{{$.ChansETag}}">
+    <textarea name="body" spellcheck="false" autocapitalize="off" autocorrect="off">{{.Body}}</textarea>
+    <button type="submit" class="primary">Review change</button>
+    <a href="/admin"><button type="button">Close</button></a>
+    <div class="hint">Credentials show as ••••••••; leave one alone to keep the value on disk. The <code>[{{.ID}}]</code> header is not editable here — renaming a channel would delete its spool.</div>
+  </form>
+  {{end}}
+</div>
+{{else}}
+<div class="card"><span class="meta">No channels configured.</span></div>
+{{end}}
+
+<div class="card">
+  <form method="post" action="/admin/channels" class="create">
+    <input type="hidden" name="etag" value="{{.ChansETag}}">
+    <input type="text" name="id" placeholder="channel id" required>
+    <select name="type">{{range .Types}}<option value="{{.}}">{{.}}</option>{{end}}</select>
+    <button type="submit">Add channel</button>
+    <span class="hint">Created disabled, with no settings yet.</span>
+  </form>
+</div>
+
+<h2>Callers</h2>
+{{range .Callers}}
+{{/* $ is the page, not this caller, so the nested key range needs its own
+     handle on the row it belongs to. */}}
+{{$caller := .}}
+<div class="card">
+  <div class="row">
+    <h3>{{.ID}}</h3>
+    <form method="post" action="/admin/callers/{{.ID}}/delete" class="inline">
+      <input type="hidden" name="etag" value="{{$.KeysETag}}">
+      <button type="submit" class="danger">Delete caller</button>
+    </form>
+  </div>
+
+  {{range .Keys}}
+  <div class="keyline">
+    <code>{{.Prefix}}</code>
+    <form method="post" action="/admin/callers/{{$caller.ID}}/revoke" class="inline">
+      <input type="hidden" name="etag" value="{{$.KeysETag}}">
+      <input type="hidden" name="prefix" value="{{.Prefix}}">
+      <button type="submit" class="danger">Revoke</button>
+    </form>
+  </div>
+  {{end}}
+
+  <form method="post" action="/admin/callers/{{.ID}}/rotate" class="inline">
+    <input type="hidden" name="etag" value="{{$.KeysETag}}">
+    <button type="submit">Add a key (rotate)</button>
+  </form>
+
+  <form method="post" action="/admin/callers/{{.ID}}/grants" style="margin-top:0.8rem">
+    <input type="hidden" name="etag" value="{{$.KeysETag}}">
+    {{range .Grants}}
+    <label class="grant"><input type="checkbox" name="channel" value="{{.Channel}}"{{if .Granted}} checked{{end}}> {{.Channel}}</label>
+    {{else}}
+    <span class="meta">No channels to grant yet.</span>
+    {{end}}
+    <button type="submit">Save grants</button>
+  </form>
+</div>
+{{else}}
+<div class="card"><span class="meta">No callers configured.</span></div>
+{{end}}
+
+<div class="card">
+  <form method="post" action="/admin/callers" class="create">
+    <input type="hidden" name="etag" value="{{.KeysETag}}">
+    <input type="text" name="id" placeholder="caller id" required>
+    <button type="submit">Add caller</button>
+    <span class="hint">Generates a key, shown once, and grants nothing.</span>
+  </form>
+</div>
+
+{{end}}
+
+<script nonce="{{.Nonce}}">
+// The only script on the page. Copying a key by hand from a monospace blob is
+// exactly where a transcription error turns into a confusing 401 later.
+document.getElementById('copykey')?.addEventListener('click', function () {
+  const el = document.getElementById('newkey');
+  navigator.clipboard.writeText(el.textContent).then(() => {
+    this.textContent = 'Copied';
+    setTimeout(() => { this.textContent = 'Copy'; }, 1500);
+  });
+});
+</script>
+</body>
+</html>
