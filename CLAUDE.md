@@ -149,3 +149,31 @@ needs touching: `channels.toml` picks it up by `type`.
   and never trusts it.
 - Tests use a scripted `fakeAdapter` and assert on the JSONL delivery log rather
   than on internals; new outbox behaviour should be provable that way too.
+
+## Commits
+
+[Conventional Commits](https://www.conventionalcommits.org/), enforced by the
+`commits` job in CI:
+
+```
+<type>(<scope>)!: <subject, imperative, lower case, no full stop>
+```
+
+`type` is one of `feat` `fix` `docs` `style` `refactor` `perf` `test` `build`
+`ci` `chore` `revert`. `scope` is optional and names the area rather than the
+file: `config`, `httpapi`, `admin`, `adapter`, `outbox`. Repo-wide changes take
+no scope. Subjects stay within 72 characters.
+
+`style` here means presentation only — the served pages' CSS and layout. Code
+formatting is not a commit of its own; `gofmt` is a CI gate.
+
+A change to a config file's shape, the request/response contract or a
+delivery guarantee is breaking: mark it `!` after the scope and add a
+`BREAKING CHANGE:` footer saying what an operator or caller has to do. This
+applies before 1.0 too — the README promises config churn, and a promise is
+not a reason to leave the churn undocumented.
+
+The body is the point. It records *why*, in the same register as the comments:
+the failure mode avoided, the alternative rejected and what it cost, what was
+deliberately left alone. A subject that needs no body is usually a commit that
+did not need making.
