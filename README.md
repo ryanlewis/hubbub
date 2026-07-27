@@ -16,6 +16,33 @@ curl -X POST https://hub.example.com/v1/notify \
   -d '{"title":"Backup failed","message":"nightly borg run exited 1","priority":"high"}'
 ```
 
+The same binary serves an operator dashboard and a browsable API reference:
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/admin-dark.png">
+  <img alt="The /admin dashboard listing four channels — phone over ntfy, email over smtp, sms over exec, and a paused desk-lamp — each naming the callers permitted to reach it" src="docs/screenshots/admin-light.png">
+</picture>
+
+<sub><a href="#the-dashboard"><code>/admin</code></a> — which channels are on, which callers may use them, and a Disable that pauses a channel without dropping its backlog.</sub>
+
+</td>
+<td width="50%" valign="top">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/docs-dark.png">
+  <img alt="The /docs reference firing a real POST /v1/notify against the hub and showing the 200 OK body with a per-channel outcome map" src="docs/screenshots/docs-light.png">
+</picture>
+
+<sub><a href="#get-docs"><code>/docs</code></a> — the reference, rendered from this instance's own spec, with a panel that fires a real request and shows what came back.</sub>
+
+</td>
+</tr>
+</table>
+
 ## Why
 
 Every script and agent that wants to reach you normally has to know about a
