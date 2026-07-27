@@ -44,6 +44,24 @@ token = ""
 # tls = "starttls"                 # starttls | implicit | none — defaults from port
 # rate_limit_cooldown = "15m"      # how long to park after a "too many messages" 4xx
 
+# A channel that is just your script — no rebuild needed for a new one. The
+# notification arrives as JSON on stdin (and as NOTIFY_* env vars for one-liner
+# scripts); exit 0 = delivered, 75 = retry, anything else = permanent failure.
+#
+# `command` is argv, run directly — never `sh -c` — and notification content
+# never reaches argv, so there is nowhere for an injection to live. Want shell
+# semantics? The configured thing is a shell script. It must still treat stdin
+# as data: no eval.
+#
+# The path has to be absolute. A bare name would resolve against the service
+# unit's PATH at send time instead of your login PATH at edit time, which turns
+# a typo here into a failed message hours from now.
+#
+# [sms]
+# type = "exec"
+# command = "/opt/hubbub/sms.sh"
+# args = ["--to", "+15550000"]
+
 # enabled = false parks a channel without deleting its credentials, and a
 # parked block is not validated — so you can strip a dead channel's settings
 # without taking the rest of this file down with it.

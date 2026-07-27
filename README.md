@@ -32,9 +32,9 @@ database, no runtime to install, no build chain.
 ## Status
 
 Early. The core vertical works end to end — authenticated notify, the outbox,
-the ntfy and smtp adapters, the full response contract, metrics, the dead-man
-heartbeat, the served OpenAPI spec and the `/admin` dashboard — and is covered
-by tests. Not yet built: the `exec` and Discord adapters, bare-URL webhooks,
+the ntfy, smtp and exec adapters, the full response contract, metrics, the
+dead-man heartbeat, the served OpenAPI spec and the `/admin` dashboard — and is
+covered by tests. Not yet built: the Discord adapter, bare-URL webhooks,
 per-key rate caps and `/v1/recent`. See [Roadmap](#roadmap).
 
 Expect breaking changes to config shapes before a tagged release.
@@ -47,7 +47,8 @@ flowchart LR
     B --> C{{outbox<br>one spool + worker per channel}}
     C --> D[ntfy]
     C --> E["smtp<br>email, HTML + text"]
-    C -.-> F["exec / Discord<br>(planned)"]
+    C --> F["exec<br>your script, JSON on stdin"]
+    C -.-> G["Discord<br>(planned)"]
 ```
 
 A request is authenticated, rate-capped, validated, then enqueued into a
@@ -211,6 +212,7 @@ enabled = false
 |---|---|
 | `ntfy` | `server` (default `https://ntfy.sh`), `topic` (required), `token` |
 | `smtp` | `host` (required), `port`, `username`, `password`, `from` (required), `from_name`, `to` (required, a list), `tls`, `helo`, `rate_limit_cooldown` |
+| `exec` | `command` (required, absolute path), `args` (a list) |
 
 `smtp` is generic submission — iCloud, Fastmail, Gmail or a relay on localhost
 are all just a `host`. It sends `multipart/alternative`: the caller's `html` (or
@@ -233,6 +235,92 @@ For iCloud specifically: `password` must be an [app-specific
 password](https://support.apple.com/en-us/102654), `from` must be your iCloud
 address or a verified alias, and if auth fails with credentials you know are
 right, try `username` as the part before the `@`.
+
+#### `exec` — a channel that is just your script
+
+`exec` runs a command you configured, so a new channel is a script plus a config
+block with **no rebuild**. It is the escape hatch for the long tail: an SMS
+gateway, a curl at a webhook, a light on a GPIO pin.
+
+```toml
+[sms]
+type = "exec"
+command = "/opt/hubbub/sms.sh"   # absolute path, always
+args = ["--to", "+15550000"]
+```
+
+The command is argv, executed directly — **never `sh -c`**, and notification
+content never reaches argv, so there is nowhere for an injection to live. If you
+want shell semantics, the configured thing *is* a shell script.
+
+The notification arrives as **JSON on stdin**:
+
+```json
+{
+  "channel": "sms",
+  "title": "disk full",
+  "message": "root at 98%",
+  "priority": "high",
+  "tags": ["warn", "host"],
+  "callerId": "cron",
+  "requestId": "r_8f3ka2",
+  "createdAt": "2026-07-27T09:00:00Z"
+}
+```
+
+`tags` is always an array, and `createdAt` is when the message was *accepted* —
+after an outage the backlog drains paced and oldest-first, so a script that says
+"queued at …" beats one that implies now. There is no `html` field: exec
+channels are text channels, and 128 KB of markup is nothing a shell script can
+render.
+
+The same values are also in the environment as `NOTIFY_CHANNEL`,
+`NOTIFY_TITLE`, `NOTIFY_MESSAGE`, `NOTIFY_PRIORITY`, `NOTIFY_TAGS`
+(comma-separated), `NOTIFY_CALLER_ID` and `NOTIFY_REQUEST_ID`, so a one-liner
+never has to parse JSON. **Nothing else is inherited except `PATH`** — hubbub's
+own environment is not passed through, so a script that needs a secret reads it
+from a file it owns.
+
+**Exit codes are the retry contract**, the way status codes are for the HTTP
+adapters:
+
+| Exit | Meaning |
+|---|---|
+| `0` | Delivered |
+| `75` | `EX_TEMPFAIL` from `sysexits.h` — retry with backoff, until the TTL |
+| anything else | Permanent failure; never retried |
+
+A script killed by a signal (the OOM killer, say) is treated as retryable: that
+is a statement about the host, not about the message. There is no rate-limited
+exit code, because an exit status carries no not-before for hubbub to honour — a
+script that knows it is throttled should exit `75` and let the backoff run.
+
+Write diagnostics to **stderr**: it becomes the `failed: <reason>` in the
+response and the delivery log, folded to a single line and clipped to 512 bytes.
+Stdout goes to `/dev/null`.
+
+The per-attempt timeout (`attempt_timeout` in `hubbub.toml`) kills the **whole
+process group**, so a script that shelled out to a curl against a black-holed
+host cannot outlive its slot. Each channel has one serial worker, so your script
+never runs concurrently with itself and needs no locking of its own.
+
+`command` must be an absolute path. A bare name would be resolved against the
+service unit's `PATH` at send time rather than your login `PATH` at edit time,
+turning a config mistake into a per-message failure hours later. The path is
+**not** checked at load — a missing script fails that one message permanently
+rather than failing the whole file and having validate-before-swap discard an
+unrelated edit.
+
+Scripts run as the service user under the unit's hardening, and must **treat
+stdin as data** — no `eval`. A leaked API key yields attacker-controlled text,
+never command choice; that boundary only holds if the script keeps it.
+
+One consequence worth being deliberate about: because a channel's settings name
+a command, **write access to `channels.toml` is code execution as the service
+user** — including through `/admin`, which can create a channel of any type.
+A shell on the box could already do that; the dashboard previously could not.
+If that seam isn't wanted, leave `[admin]` out of `hubbub.toml` and the routes
+are never registered. See [SECURITY.md](SECURITY.md).
 
 The table name is the channel id that permissions and results refer to; `type`
 picks the adapter. Several instances of one type are fine. Because the id is a
@@ -626,7 +714,7 @@ Two rules the codebase holds to:
       URL, plus `/`, `/docs` and `/llms.txt` for readers who arrive without a key
 - [x] `smtp` adapter — email as `multipart/alternative`, with an optional
       caller-supplied `html` body
-- [ ] `exec` adapter — shell-out channels, no rebuild required
+- [x] `exec` adapter — shell-out channels, no rebuild required
 - [ ] Discord adapter
 - [ ] Per-key rate caps and idempotency keys
 - [ ] Bare-URL webhooks (`POST /hook/<token>`) for senders that can't set headers

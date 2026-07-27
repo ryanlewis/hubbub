@@ -81,6 +81,21 @@ is documented where an operator will meet it.
   content that is already trusted. A key grants markup in the operator's inbox;
   the README says so rather than leaving it implied.
 
+- **An `exec` channel runs an operator-configured command**, which makes write
+  access to `channels.toml` equivalent to code execution as the service user.
+  That was already true of a shell on the box — you cannot hand-edit the file
+  without one — but it is newly true of **`/admin`**, which can create a
+  channel of any registered type and fill in its settings. So assumption 3 now
+  guards rather more than notification credentials: where the dashboard is
+  reachable without a header-stripping proxy in front, it is a remote shell.
+  Deployments that do not want that seam can leave `[admin]` out of
+  `hubbub.toml` entirely, which unregisters the routes.
+
+  What an `exec` channel is *not* is a path from a caller to a command: keys
+  reach channels, never configuration, and notification content is passed as
+  data on stdin and in `NOTIFY_*` — never as argv, and never through a shell.
+  A caller-controlled string reaching a command line is a real finding.
+
 - **No per-key rate limits.** There is one global cap, and it is a blast-radius
   guard rather than accounting: a compromised key can exhaust it for every
   other caller. Per-key caps are on the roadmap, and the trade is stated.
