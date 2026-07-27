@@ -56,13 +56,19 @@ jobs:
               Revert\ \"*|"Merge "*) continue ;;
             esac
 
-            if ! printf '%s' "$subject" | grep -Eq "$pattern"; then
+            # A squash merge arrives with " (#123)" appended. That suffix is
+            # GitHub's, not the author's, so it is measured out rather than
+            # spending someone's character budget — a subject written at the
+            # limit would otherwise fail only once it merged.
+            written=$(printf '%s' "$subject" | sed -E 's/ \(#[0-9]+\)$//')
+
+            if ! printf '%s' "$written" | grep -Eq "$pattern"; then
               echo "::error::$short: not a Conventional Commit subject: $subject"
               failed=1
-            elif [ "${#subject}" -gt 72 ]; then
-              echo "::error::$short: subject is ${#subject} chars, limit is 72: $subject"
+            elif [ "${#written}" -gt 72 ]; then
+              echo "::error::$short: subject is ${#written} chars, limit is 72: $subject"
               failed=1
-            elif [ "${subject%.}" != "$subject" ]; then
+            elif [ "${written%.}" != "$written" ]; then
               echo "::error::$short: subject ends in a full stop: $subject"
               failed=1
             else
