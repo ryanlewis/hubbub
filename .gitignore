@@ -4,3 +4,4 @@
 *.log
 /example/spool/
 /example/delivery.log
+.DS_Store
