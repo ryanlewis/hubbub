@@ -48,9 +48,17 @@ port = 2112
 #
 # allowed_emails has no "allow everyone": an empty list fails the load rather
 # than publishing key management to the internet.
+#
+# allow_exec_channels decides whether this dashboard may write a channel whose
+# settings name a command to run (an `exec` block). Off, those are SSH-only:
+# with it on, reaching /admin is a way to run code as the service user, and the
+# thing standing in front of /admin is a proxy header. Pausing, resuming,
+# deleting, testing and granting an exec channel work either way — they act on
+# a command you already chose.
 [admin]
 auth = "exe-dev"
 allowed_emails = ["you@example.com"]
+allow_exec_channels = false
 
 # Dead-man's switch. Any provider works — the URL is just pinged on a timer,
 # and each tick is gated on hubbub probing its own listener first, so a wedged

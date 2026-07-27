@@ -66,6 +66,26 @@ func Register(typeName string, f Factory) {
 	registry[typeName] = f
 }
 
+// executors are the types whose configuration names a program hubbub will run,
+// so editing one chooses what code executes on the box rather than where a
+// notification goes. The delivery path treats them like any other adapter; the
+// distinction exists for /admin, which gates them behind a config flag so that
+// dashboard access is not by itself a shell.
+var executors = map[string]bool{}
+
+// RegisterExecutor is Register for such a type. Kept as a separate call rather
+// than a field on the factory so that adding one is a deliberate act with a
+// name attached, not a struct literal someone can fill in absent-mindedly.
+func RegisterExecutor(typeName string, f Factory) {
+	Register(typeName, f)
+	executors[typeName] = true
+}
+
+// IsExecutor reports whether configuring this type amounts to choosing a
+// program to run. An unknown type answers false: it configures nothing, and
+// callers check Known separately.
+func IsExecutor(typeName string) bool { return executors[typeName] }
+
 // Known reports whether a type name has a registered factory. Lets the config
 // loader typo-check a disabled channel's type without building its adapter.
 func Known(typeName string) bool {

@@ -83,18 +83,23 @@ is documented where an operator will meet it.
 
 - **An `exec` channel runs an operator-configured command**, which makes write
   access to `channels.toml` equivalent to code execution as the service user.
-  That was already true of a shell on the box — you cannot hand-edit the file
-  without one — but it is newly true of **`/admin`**, which can create a
-  channel of any registered type and fill in its settings. So assumption 3 now
-  guards rather more than notification credentials: where the dashboard is
-  reachable without a header-stripping proxy in front, it is a remote shell.
-  Deployments that do not want that seam can leave `[admin]` out of
-  `hubbub.toml` entirely, which unregisters the routes.
+  Over SSH that is not a new power — hand-editing the file needs a shell
+  already. Through `/admin` it would be, so the dashboard **refuses to write
+  exec channels unless `admin.allow_exec_channels = true`**: it will not create
+  one, convert another channel into one, or edit an existing one's settings. It
+  may still pause, resume, delete, test and grant them, which act on a command
+  the operator already chose.
+
+  With the flag on, `/admin` is a way to run code on the box, and assumption 3
+  is then load-bearing for rather more than notification credentials. That is
+  the trade the flag exists to make explicit; it is off by default. A way to
+  write an exec channel's `command` or `args` from the dashboard **without**
+  the flag is a real finding.
 
   What an `exec` channel is *not* is a path from a caller to a command: keys
   reach channels, never configuration, and notification content is passed as
   data on stdin and in `NOTIFY_*` — never as argv, and never through a shell.
-  A caller-controlled string reaching a command line is a real finding.
+  A caller-controlled string reaching a command line is a real finding too.
 
 - **No per-key rate limits.** There is one global cap, and it is a blast-radius
   guard rather than accounting: a compromised key can exhaust it for every

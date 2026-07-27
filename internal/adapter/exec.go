@@ -60,7 +60,9 @@ const (
 )
 
 func init() {
-	Register("exec", func(id string, decode Decode) (Adapter, error) {
+	// Registered as an executor: its settings name a command, so /admin will
+	// not write one unless the deployment opted in.
+	RegisterExecutor("exec", func(id string, decode Decode) (Adapter, error) {
 		return newExec(id, decode)
 	})
 }

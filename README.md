@@ -150,6 +150,7 @@ allowed_emails = ["you@example.com"]
 | `public_port` | `8080` | Caller-facing API |
 | `[ops]` | *(absent)* | Presence-enabled. Brings up a second listener for `/metrics`, `/health` and the test CTA |
 | `[admin]` | *(absent)* | Presence-enabled. Serves the [dashboard](#the-dashboard) on the public listener. `allowed_emails` must name at least one address — there is no "allow everyone" |
+| `admin.allow_exec_channels` | `false` | Lets the dashboard write channels that name a command to run ([`exec`](#exec--a-channel-that-is-just-your-script)). Off, those are configured over SSH |
 | `rate_cap_per_hour` | `60` | Global cap across all keys. Must be ≥ 1 — there is no "unlimited" |
 | `response_window` | `2.5s` | How long a request waits on delivery outcomes |
 | `queue_ttl` | `6h` | How long an undeliverable message stays queued before it's dropped |
@@ -315,12 +316,28 @@ Scripts run as the service user under the unit's hardening, and must **treat
 stdin as data** — no `eval`. A leaked API key yields attacker-controlled text,
 never command choice; that boundary only holds if the script keeps it.
 
-One consequence worth being deliberate about: because a channel's settings name
-a command, **write access to `channels.toml` is code execution as the service
-user** — including through `/admin`, which can create a channel of any type.
-A shell on the box could already do that; the dashboard previously could not.
-If that seam isn't wanted, leave `[admin]` out of `hubbub.toml` and the routes
-are never registered. See [SECURITY.md](SECURITY.md).
+Because a channel's settings name a command, **write access to `channels.toml`
+is code execution as the service user**. Over SSH that changes nothing — you
+needed a shell to edit the file. Through `/admin` it would, so **the dashboard
+refuses to write exec channels by default**:
+
+```toml
+[admin]
+auth = "exe-dev"
+allowed_emails = ["you@example.com"]
+allow_exec_channels = true   # default false
+```
+
+Off, the dashboard won't create an exec channel, won't rewrite another channel
+into one, and won't edit an existing one's settings — all three, because the
+settings editor replaces a block's whole body and gating only the create form
+would be theatre. It can still pause, resume, delete, test and grant an exec
+channel: those act on a command you already chose, and being able to pause a
+misfiring one from a phone is worth more than the difference refusing it makes.
+
+Turn it on if you'd rather have the convenience, knowing it makes `/admin` —
+whose identity is a proxy header — a way to run code on the box. See
+[SECURITY.md](SECURITY.md).
 
 The table name is the channel id that permissions and results refer to; `type`
 picks the adapter. Several instances of one type are fine. Because the id is a

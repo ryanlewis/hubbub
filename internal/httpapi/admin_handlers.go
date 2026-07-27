@@ -78,6 +78,43 @@ func (s *Server) preview(w http.ResponseWriter, r *http.Request, f *confedit.Fil
 
 // --- channels ---------------------------------------------------------------
 
+// refuseExec is the message an operator gets when the dashboard declines to
+// write a channel that names a command. It says where the edit can be made
+// instead, because the answer is "over SSH", not "you can't".
+func refuseExec(id, typ string) error {
+	return fmt.Errorf("channel %q is type %q, whose settings name a command hubbub runs — "+
+		"edit channels.toml directly, or set allow_exec_channels = true in [admin] to do it here", id, typ)
+}
+
+// guardExec refuses an edit that leaves — or starts from — a block naming a
+// command to run.
+//
+// Both sides matter, and for different reasons. `before` stops an existing exec
+// channel's command being repointed. `after` stops any other channel being
+// converted into one, which the settings editor could otherwise do by replacing
+// a block's whole body with a type line and a command. Checking only the create
+// form would gate the front door and leave both windows open.
+//
+// Nothing here touches pausing, resuming, deleting, testing or granting an exec
+// channel: those act on a command the operator already chose, and the dashboard
+// keeping the ability to pause a misfiring one is worth more than the
+// difference denying it would make.
+func (s *Server) guardExec(before, after []byte, id string) error {
+	if s.Admin.AllowExec {
+		return nil
+	}
+	for _, src := range [][]byte{before, after} {
+		types, err := config.DeclaredTypes(src, s.Admin.Channels.Path)
+		if err != nil {
+			return err
+		}
+		if adapter.IsExecutor(types[id]) {
+			return refuseExec(id, types[id])
+		}
+	}
+	return nil
+}
+
 func (s *Server) handleChannelCreate(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(r.FormValue("id"))
 	typ := strings.TrimSpace(r.FormValue("type"))
@@ -88,6 +125,12 @@ func (s *Server) handleChannelCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	if !adapter.Known(typ) {
 		s.fail(w, r, fmt.Errorf("unknown adapter type %q (known: %s)", typ, strings.Join(adapter.Types(), ", ")))
+		return
+	}
+	// Before the write rather than through guardExec: there is no block yet to
+	// read a type out of, and the submitted type is the whole of the intent.
+	if !s.Admin.AllowExec && adapter.IsExecutor(typ) {
+		s.fail(w, r, refuseExec(id, typ))
 		return
 	}
 
@@ -177,6 +220,9 @@ func (s *Server) handleChannelSettings(w http.ResponseWriter, r *http.Request) {
 			return nil, err
 		}
 		if err := verifiedSpan(out, id); err != nil {
+			return nil, err
+		}
+		if err := s.guardExec(src, out, id); err != nil {
 			return nil, err
 		}
 		return out, tomledit.VerifyNeighbours(src, out, id)

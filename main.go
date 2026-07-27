@@ -48,7 +48,8 @@ func buildAdmin(cfg *config.Config) (*httpapi.Admin, error) {
 		return nil, err
 	}
 	return &httpapi.Admin{
-		Guard: guard,
+		Guard:     guard,
+		AllowExec: cfg.Admin.AllowExecChannels,
 		Keys: &confedit.File{Path: cfg.KeysFile, Validate: func(src []byte, name string) error {
 			_, err := config.ParseKeys(src, name)
 			return err

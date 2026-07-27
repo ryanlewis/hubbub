@@ -163,6 +163,29 @@ func ParseChannels(src []byte, name string) (*ChannelSet, error) {
 	return set, nil
 }
 
+// DeclaredTypes reports the `type` each block in a channels file claims,
+// without constructing anything or judging whether the rest of the block is
+// usable. It answers "what would this file declare" for an edit that has not
+// been committed yet — including for a block half-written enough that
+// ParseChannels would refuse it, since a refused edit is exactly when knowing
+// the intended type still matters.
+func DeclaredTypes(src []byte, name string) (map[string]string, error) {
+	var entries map[string]toml.Primitive
+	md, err := toml.Decode(string(src), &entries)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", name, err)
+	}
+	types := make(map[string]string, len(entries))
+	for id, prim := range entries {
+		var env channelEnvelope
+		if err := md.PrimitiveDecode(prim, &env); err != nil {
+			return nil, fmt.Errorf("%s: channel %q: %w", name, id, err)
+		}
+		types[id] = env.Type
+	}
+	return types, nil
+}
+
 // All returns every channel, enabled or not, sorted by id. The outbox needs
 // the disabled ones too: a disabled channel keeps its spool (disabling is a
 // pause, not a purge), which is only distinguishable from a *removed*

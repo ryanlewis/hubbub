@@ -22,6 +22,11 @@ type Admin struct {
 	Guard    *adminauth.Guard
 	Keys     *confedit.File
 	Channels *confedit.File
+
+	// AllowExec permits writing channels whose settings name a command to run.
+	// Off, those are SSH-only: see config.AdminConfig.AllowExecChannels for why
+	// the default is the restrictive one.
+	AllowExec bool
 }
 
 // keyPrefixLen is how much of a bearer key the dashboard will show. Enough to
@@ -226,7 +231,14 @@ func (s *Server) fillAdminState(v *adminView) error {
 		v.Channels = append(v.Channels, c)
 	}
 	v.ChannelIDs = live.IDs()
-	v.Types = adapter.Types()
+	// The create form offers only what this deployment will actually write.
+	// Cosmetic — handleChannelCreate refuses the same types on its own, since a
+	// form is a suggestion and the check has to hold against a hand-rolled POST.
+	for _, t := range adapter.Types() {
+		if s.Admin.AllowExec || !adapter.IsExecutor(t) {
+			v.Types = append(v.Types, t)
+		}
+	}
 
 	keySrc, keyETag, err := s.Admin.Keys.Read()
 	if err != nil {

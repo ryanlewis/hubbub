@@ -49,6 +49,13 @@ type HeartbeatConfig struct {
 type AdminConfig struct {
 	Auth          string   `toml:"auth"`
 	AllowedEmails []string `toml:"allowed_emails"`
+	// AllowExecChannels lets the dashboard write channels whose settings name a
+	// command to run — an `exec` block, today. Off by default, because that
+	// turns reaching /admin into running code as the service user, and the
+	// identity in front of it is a proxy header rather than a password. Off,
+	// such a channel is configured over SSH by someone who could already run
+	// code; the dashboard can still pause, resume, delete, test and grant it.
+	AllowExecChannels bool `toml:"allow_exec_channels"`
 }
 
 type Config struct {
