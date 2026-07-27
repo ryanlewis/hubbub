@@ -47,6 +47,22 @@
   // Renovate.
   prConcurrentLimit: 3,
 
+  // Everything above is tuned to keep routine maintenance quiet: a weekly
+  // window, a three-day wait, one batched PR. Applied to a known-exploitable
+  // dependency those same settings become a delay of up to a week on the one
+  // update that cannot wait, so a security fix opts out of all of them and
+  // arrives immediately, alone and labelled.
+  //
+  // This reads GitHub's Dependabot alerts, which have to stay enabled on the
+  // repository for any of it to fire.
+  vulnerabilityAlerts: {
+    enabled: true,
+    schedule: null,
+    minimumReleaseAge: null,
+    groupName: null,
+    addLabels: ['security'],
+  },
+
   packageRules: [
     {
       description: 'One PR a week for everything that is not a major bump. \
