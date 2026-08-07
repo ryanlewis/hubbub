@@ -55,6 +55,14 @@
   //
   // This reads GitHub's Dependabot alerts, which have to stay enabled on the
   // repository for any of it to fire.
+  //
+  // osvVulnerabilityAlerts adds OSV as a second feed alongside Dependabot.
+  // OSV carries the OpenSSF Malicious Packages advisories as MAL-* entries,
+  // and Renovate refuses to propose a version flagged that way at all —
+  // blocking a compromised release up front rather than alerting after it
+  // has been merged. Dependabot alone cannot do this.
+  osvVulnerabilityAlerts: true,
+
   vulnerabilityAlerts: {
     enabled: true,
     schedule: null,
