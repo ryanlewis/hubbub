@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -330,6 +331,170 @@ func TestOpenAPIDocumentsEveryStatusTheHandlerReturns(t *testing.T) {
 				t.Fatalf("status = %d, want %d (body %s)", rec.Code, tc.want, rec.Body)
 			}
 			if !documentedStatuses(t, notifyOp(t, servedSpec(t, s, nil)))[rec.Code] {
+				t.Errorf("handler returns %d but the spec does not document it", rec.Code)
+			}
+		})
+	}
+}
+
+// recentOp returns the GET /v1/recent operation object from a served spec.
+func recentOp(t *testing.T, doc map[string]any) map[string]any {
+	t.Helper()
+	op, ok := dig(doc, "paths", "/v1/recent", "get")
+	if !ok {
+		t.Fatal("spec has no GET /v1/recent operation")
+	}
+	return op
+}
+
+// TestOpenAPIRecentParametersMatchTheHandler is the query-string half of the
+// drift check. A filter the handler accepts but nobody documents is a filter no
+// caller finds; one the spec lists but the handler rejects is a 400 for a caller
+// that did exactly what it was told — and this handler rejects unknown
+// parameters, so the second failure is guaranteed rather than merely likely.
+func TestOpenAPIRecentParametersMatchTheHandler(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer up.Close()
+	s := newTestServer(t, up.URL, "")
+
+	params, ok := recentOp(t, servedSpec(t, s, nil))["parameters"].([]any)
+	if !ok || len(params) == 0 {
+		t.Fatal("GET /v1/recent documents no parameters")
+	}
+
+	var documented []string
+	for _, p := range params {
+		obj, _ := p.(map[string]any)
+		if in, _ := obj["in"].(string); in != "query" {
+			t.Errorf("parameter %v is %q, not a query parameter", obj["name"], in)
+			continue
+		}
+		name, _ := obj["name"].(string)
+		documented = append(documented, name)
+	}
+	actual := slices.Clone(recentParams)
+	sort.Strings(documented)
+	sort.Strings(actual)
+	if !reflect.DeepEqual(documented, actual) {
+		t.Errorf("query parameters drifted:\n  spec:    %v\n  handler: %v", documented, actual)
+	}
+}
+
+// The bounds are enforced in code and advertised in the document; a reader who
+// believes the document and asks for 1000 must not get a 400.
+func TestOpenAPIRecentLimitBoundsMatchTheParser(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer up.Close()
+	s := newTestServer(t, up.URL, "")
+
+	params, _ := recentOp(t, servedSpec(t, s, nil))["parameters"].([]any)
+	var limit map[string]any
+	for _, p := range params {
+		obj, _ := p.(map[string]any)
+		if obj["name"] == "limit" {
+			limit, _ = obj["schema"].(map[string]any)
+		}
+	}
+	if limit == nil {
+		t.Fatal("spec has no limit parameter schema")
+	}
+	for field, want := range map[string]int{
+		"minimum": 1,
+		"maximum": recentMaxLimit,
+		"default": recentDefaultLimit,
+	} {
+		got, ok := limit[field].(float64)
+		if !ok {
+			t.Errorf("limit has no %s", field)
+			continue
+		}
+		if int(got) != want {
+			t.Errorf("limit %s = %d, want %d", field, int(got), want)
+		}
+	}
+
+	// And the numbers are load-bearing at both ends.
+	reader, _ := recentServer(t, up.URL)
+	for query, want := range map[string]int{
+		"/v1/recent?limit=1":   http.StatusOK,
+		"/v1/recent?limit=500": http.StatusOK,
+		"/v1/recent?limit=501": http.StatusBadRequest,
+		"/v1/recent?limit=0":   http.StatusBadRequest,
+	} {
+		if rec, _ := getRecent(t, reader, query, readerKey); rec.Code != want {
+			t.Errorf("%s = %d, want %d", query, rec.Code, want)
+		}
+	}
+}
+
+// The response is what a dashboard renders field by field, so the documented
+// item has to be the struct the handler marshals — the same check the request
+// schema gets, in the other direction.
+func TestOpenAPIRecentItemSchemaMatchesTheResponse(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer up.Close()
+	s := newTestServer(t, up.URL, "")
+	spec := servedSpec(t, s, nil)
+
+	props, ok := dig(spec, "components", "schemas", "RecentItem", "properties")
+	if !ok {
+		t.Fatal("spec has no RecentItem.properties")
+	}
+	var documented, actual []string
+	for name := range props {
+		documented = append(documented, name)
+	}
+	for f := range reflect.TypeFor[recentItem]().Fields() {
+		if name, _, _ := strings.Cut(f.Tag.Get("json"), ","); name != "" && name != "-" {
+			actual = append(actual, name)
+		}
+	}
+	sort.Strings(documented)
+	sort.Strings(actual)
+	if !reflect.DeepEqual(documented, actual) {
+		t.Errorf("RecentItem properties drifted:\n  spec:    %v\n  handler: %v", documented, actual)
+	}
+
+	// Every field is required, because the handler always emits every field —
+	// documenting one as optional would invite a consumer to handle an absence
+	// that never happens and skip an empty string that does.
+	required, _ := dig(spec, "components", "schemas", "RecentItem")
+	var req []string
+	for _, r := range required["required"].([]any) {
+		req = append(req, r.(string))
+	}
+	sort.Strings(req)
+	if !reflect.DeepEqual(req, actual) {
+		t.Errorf("RecentItem required = %v, want every field %v", req, actual)
+	}
+}
+
+// TestOpenAPIDocumentsEveryStatusRecentReturns is the sibling of the notify
+// status check: the read has its own refusals, and a poller has to be able to
+// tell "your key can't do this" from "your query was nonsense".
+func TestOpenAPIDocumentsEveryStatusRecentReturns(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer up.Close()
+
+	s, _ := recentServer(t, up.URL)
+
+	cases := []struct {
+		name, key, query string
+		want             int
+	}{
+		{"read", readerKey, "/v1/recent", http.StatusOK},
+		{"bad query", readerKey, "/v1/recent?limit=nope", http.StatusBadRequest},
+		{"no key", "", "/v1/recent", http.StatusUnauthorized},
+		{"send-only key", devKey, "/v1/recent", http.StatusForbidden},
+	}
+	documented := documentedStatuses(t, recentOp(t, servedSpec(t, s, nil)))
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec, _ := getRecent(t, s, tc.query, tc.key)
+			if rec.Code != tc.want {
+				t.Fatalf("status = %d, want %d (body %s)", rec.Code, tc.want, rec.Body)
+			}
+			if !documented[rec.Code] {
 				t.Errorf("handler returns %d but the spec does not document it", rec.Code)
 			}
 		})

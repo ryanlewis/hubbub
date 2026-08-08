@@ -1,7 +1,7 @@
 // Package dlog is the JSONL delivery log: one line per notification at
-// accept time, a second terminal line for queued outcomes, plus auth-failure
-// and rate-cap lines. Always encoder-built (never hand-concatenated);
-// content is already control-char-stripped at ingest.
+// accept time, a second terminal line for queued outcomes, plus auth-failure,
+// rate-cap, admin-change and log-read lines. Always encoder-built (never
+// hand-concatenated); content is already control-char-stripped at ingest.
 package dlog
 
 import (
@@ -14,7 +14,7 @@ import (
 
 type Record struct {
 	Time      time.Time         `json:"ts"`
-	Kind      string            `json:"kind"` // request | terminal | auth_fail
+	Kind      string            `json:"kind"` // request | terminal | auth_fail | admin | read
 	RequestID string            `json:"requestId,omitempty"`
 	CallerID  string            `json:"callerId,omitempty"`
 	Result    string            `json:"result,omitempty"`
@@ -25,10 +25,12 @@ type Record struct {
 	Priority  string            `json:"priority,omitempty"`
 	Channel   string            `json:"channel,omitempty"` // terminal lines
 	Outcome   string            `json:"outcome,omitempty"` // terminal lines
-	// admin lines: who changed what. The actor is an operator's own address
-	// from the admin identity provider, not a caller id — a permission change
-	// is worth being able to attribute months later, and the delivery log is
-	// already the file that survives restarts and gets rotated.
+	// admin and read lines: who changed what, and who read it back. The actor
+	// is an operator's own address from the admin identity provider, not a
+	// caller id — a permission change is worth being able to attribute months
+	// later, and the delivery log is already the file that survives restarts
+	// and gets rotated. A read carries whichever of the two credentials was
+	// used: CallerID for a key, Actor for an operator.
 	Actor     string `json:"actor,omitempty"`
 	Action    string `json:"action,omitempty"`
 	Peer      string `json:"peer,omitempty"` // auth_fail lines
@@ -41,8 +43,15 @@ type Logger struct {
 	f  *os.File
 }
 
+// Open opens (or creates) the delivery log for appending.
+//
+// O_RDWR rather than O_WRONLY because Recent reads back through this same
+// descriptor. Reading by path instead would diverge from what is being written
+// the moment the file is rotated by rename: this process keeps appending to the
+// renamed inode, so a path read would answer from a fresh empty file while the
+// hub's actual log carried on elsewhere.
 func Open(path string) (*Logger, error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, err
 	}

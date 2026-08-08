@@ -450,7 +450,10 @@ label.grant:has(input:checked) .paused { color: inherit; }
 {{$caller := .}}
 <div class="card plain" id="cl-{{.ID}}">
   <div class="head">
-    <span class="ident"><h3>{{.ID}}</h3></span>
+    {{/* The read grant is shown, not editable: it is set by hand in keys.toml,
+         and a permission this page cannot display is one nobody remembers
+         issuing. Sending is the grid below; this is the other half. */}}
+    <span class="ident"><h3>{{.ID}}</h3>{{if .Recent}}<span class="tag" title="May read the delivery log via GET /v1/recent (recent = true in keys.toml)">reads log</span>{{end}}</span>
     <form method="post" action="/admin/callers/{{.ID}}/delete" class="inline">
       <input type="hidden" name="etag" value="{{$.KeysETag}}">
       <button type="submit" class="btn quiet danger" aria-label="Delete caller {{.ID}}">Delete caller</button>

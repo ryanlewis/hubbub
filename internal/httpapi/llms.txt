@@ -65,6 +65,16 @@ Delivery is at-least-once: a caller that times out and retries may double-send.
 The cost of a duplicate is a second phone buzz; the cost of a lost alert is
 worse.
 
+`GET /v1/recent` reads back what has been delivered lately — `ts`, `settledAt`,
+`caller`, `channel`, `title`, `priority` and `outcome` per item, newest first,
+with `?limit=`, `?since=` and `?channel=` to narrow it. To poll, pass `since`
+set to the newest `ts` you hold and re-ask with a larger `limit` whenever the
+answer says `"truncated": true`. It is a separate permission
+from sending, and most keys do not have it: the log holds every caller's
+notifications, so a key that has not been granted `recent` gets a 403 there no
+matter what it may send. If you were issued a key to send with, assume you
+cannot read this.
+
 ## Docs
 
 - [OpenAPI 3.1 spec]({{.BaseURL}}/openapi.json): the full machine-readable

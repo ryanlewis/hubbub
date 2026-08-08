@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -44,6 +45,7 @@ type endpointView struct {
 	Summary        string
 	Description    template.HTML
 	Secured        bool
+	QueryParams    []fieldView
 	RequestFields  []fieldView
 	ResponseFields []fieldView
 	Examples       []exampleView
@@ -169,6 +171,23 @@ func buildEndpoint(spec *oaSpec, path, method string, op oaOperation) endpointVi
 		Secured: op.Security == nil || len(*op.Security) > 0,
 	}
 
+	// Query parameters get the same table as body fields: to a caller they are
+	// inputs like any other, and an endpoint whose filters are documented only
+	// in the spec's JSON is one whose knobs a reader of this page never finds.
+	for _, p := range op.Parameters {
+		if p.In != "query" {
+			continue
+		}
+		schema := deref(p.Schema, spec)
+		e.QueryParams = append(e.QueryParams, fieldView{
+			Name:        p.Name,
+			Type:        typeLabel(schema),
+			Rules:       rules(schema),
+			Required:    p.Required,
+			Description: inlineMarkdown(p.Description),
+		})
+	}
+
 	if op.RequestBody != nil {
 		if media, ok := op.RequestBody.Content["application/json"]; ok {
 			e.RequestFields = fieldsFor(media.Schema, spec)
@@ -263,6 +282,13 @@ func typeLabel(s *oaSchema) string {
 		return ""
 	}
 	if s.Type == "array" && s.Items != nil {
+		// A $ref'd item has no inline type. This page renders one table per
+		// operation and not the schemas behind it, so the honest label is the
+		// shape rather than a name pointing at nothing on the page — and far
+		// better than the bare "[]" an empty type produces.
+		if s.Items.Type == "" {
+			return "object[]"
+		}
 		return s.Items.Type + "[]"
 	}
 	if s.Type == "" && s.Const != nil {
@@ -301,6 +327,14 @@ func rules(s *oaSchema) string {
 	if s.MaxItems != nil {
 		out = append(out, fmt.Sprintf("≤ %d items", *s.MaxItems))
 	}
+	switch {
+	case s.Minimum != nil && s.Maximum != nil:
+		out = append(out, fmt.Sprintf("%s–%s", number(*s.Minimum), number(*s.Maximum)))
+	case s.Minimum != nil:
+		out = append(out, "≥ "+number(*s.Minimum))
+	case s.Maximum != nil:
+		out = append(out, "≤ "+number(*s.Maximum))
+	}
 	if s.Items != nil && s.Items.MaxBytes != nil {
 		out = append(out, fmt.Sprintf("each ≤ %d bytes", *s.Items.MaxBytes))
 	}
@@ -308,6 +342,13 @@ func rules(s *oaSchema) string {
 		out = append(out, fmt.Sprintf("default: %v", s.Default))
 	}
 	return strings.Join(out, " · ")
+}
+
+// number renders a JSON number without the trailing ".0" that %v gives a
+// float64 — the bounds in this document are all counts, and "limit 1.0–500.0"
+// reads like a precision the field does not have.
+func number(f float64) string {
+	return strconv.FormatFloat(f, 'f', -1, 64)
 }
 
 // deref resolves a local $ref. One level is all this spec uses, and a schema

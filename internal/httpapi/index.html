@@ -170,6 +170,9 @@ code; <code>result</code> repeats it in the body.</p>
   <li><a href="/openapi.json"><code>GET /openapi.json</code></a> — the full machine-readable contract, generated for this deployment</li>
   <li><a href="/llms.txt"><code>GET /llms.txt</code></a> — the same, condensed, for agents</li>
   <li><a href="/health"><code>GET /health</code></a> — liveness</li>
+  {{/* Listed without a link: it answers 401 to the anonymous reader of this
+       page, and a link that only ever refuses is worse than a line of prose. */}}
+  <li><code>GET /v1/recent</code> — recent deliveries as JSON, newest first. A separate grant from sending, which most keys do not have</li>
 </ul>
 
 <footer>

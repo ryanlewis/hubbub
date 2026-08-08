@@ -226,6 +226,25 @@
   <p class="summary">{{.Summary}}</p>
   {{if .Description}}<p>{{.Description}}</p>{{end}}
 
+  {{if .QueryParams}}
+  <h3>Query parameters</h3>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Parameter</th><th>Type</th><th>Rules</th><th></th></tr></thead>
+    <tbody>
+      {{range .QueryParams}}
+      <tr>
+        <td class="name">{{.Name}}{{if .Required}}<span class="req">*</span>{{end}}</td>
+        <td class="type">{{.Type}}</td>
+        <td class="rules">{{.Rules}}</td>
+        <td>{{.Description}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{end}}
+
   {{if .RequestFields}}
   <h3>Request body</h3>
   <div class="scroll">

@@ -25,14 +25,21 @@ const devKey = "nh_test_key_0123456789"
 // adapter → the given upstream — with a short response window.
 func newTestServer(t *testing.T, upstreamURL string, channelsTOML string) *Server {
 	t.Helper()
-	dir := t.TempDir()
+	return newTestServerWithKeys(t, t.TempDir(), upstreamURL, channelsTOML, "[dev]\nkey = \""+devKey+"\"\nchannels = [\"ntfy\"]\n")
+}
+
+// newTestServerWithKeys is the same vertical for tests that turn on a
+// permission the default caller does not have. The directory is the caller's so
+// that a test can read back the delivery log this server writes.
+func newTestServerWithKeys(t *testing.T, dir, upstreamURL, channelsTOML, keysTOML string) *Server {
+	t.Helper()
 
 	if channelsTOML == "" {
 		channelsTOML = "[ntfy]\ntype = \"ntfy\"\nserver = \"" + upstreamURL + "\"\ntopic = \"tst\"\n"
 	}
 	keysPath := filepath.Join(dir, "keys.toml")
 	chansPath := filepath.Join(dir, "channels.toml")
-	os.WriteFile(keysPath, []byte("[dev]\nkey = \""+devKey+"\"\nchannels = [\"ntfy\"]\n"), 0o600)
+	os.WriteFile(keysPath, []byte(keysTOML), 0o600)
 	os.WriteFile(chansPath, []byte(channelsTOML), 0o600)
 
 	store, err := config.NewStore(&config.Config{KeysFile: keysPath, ChannelsFile: chansPath})

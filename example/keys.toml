@@ -6,6 +6,16 @@
 key = "nh_dev_key_change_me"
 channels = ["ntfy"]
 
+# `recent = true` grants GET /v1/recent — reading the delivery log — and nothing
+# else. It is separate from sending on purpose: the log holds every caller's
+# titles, so a send key that leaks must not also read everyone else's traffic.
+# A dashboard widget wants exactly this and no channels at all.
+#
+# [dashboard]
+# key = "nh_dashboard_key..."
+# channels = []
+# recent = true
+
 # key also accepts an array, which is how you rotate with no outage window:
 # add the new key, flip the caller over, then remove the old one. Both map to
 # the same caller id in the delivery log.

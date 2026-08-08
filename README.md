@@ -60,9 +60,9 @@ database, no runtime to install, no build chain.
 
 Early. The core vertical works end to end — authenticated notify, the outbox,
 the ntfy, smtp and exec adapters, the full response contract, metrics, the
-dead-man heartbeat, the served OpenAPI spec and the `/admin` dashboard — and is
-covered by tests. Not yet built: the Discord adapter, bare-URL webhooks,
-per-key rate caps and `/v1/recent`. See [Roadmap](#roadmap).
+dead-man heartbeat, the served OpenAPI spec, `/v1/recent` and the `/admin`
+dashboard — and is covered by tests. Not yet built: the Discord adapter,
+bare-URL webhooks and per-key rate caps. See [Roadmap](#roadmap).
 
 Expect breaking changes to config shapes before a tagged release.
 
@@ -208,6 +208,20 @@ set**. A key permitted `["ntfy","email"]` reaches both.
 `key` accepts a string or an array, so rotation is add → flip → remove with no
 outage window. Both map to the same caller id in the delivery log. Generate keys
 from a CSPRNG (`openssl rand -hex 24`); they must be at least 16 characters.
+
+```toml
+# A dashboard that reads the delivery log and sends nothing.
+[glance]
+key = "nh_..."
+channels = []
+recent = true
+```
+
+`recent` grants [`GET /v1/recent`](#get-v1recent) and nothing else. It is a
+separate permission from sending because the log holds every caller's titles: a
+send key that leaks must not also be a window onto everyone else's
+notifications. A caller with `channels = []` can read and not send; the two
+grants are independent in both directions.
 
 ### `channels.toml` — where credentials live
 
@@ -475,6 +489,95 @@ request that cannot succeed until `channels.toml` is edited.
 A `202` is settled later in the delivery log, not over HTTP — a queued message
 that eventually expires shows up there and in `/metrics`.
 
+### `GET /v1/recent`
+
+Recent deliveries, newest first, as JSON — built for a dashboard widget polling
+every few minutes.
+
+```sh
+curl -H "Authorization: Bearer $HUBBUB_RECENT_KEY" \
+  'https://hub.example.com/v1/recent?limit=2'
+```
+
+```json
+{
+  "items": [
+    {
+      "ts": "2026-08-08T09:31:02.418Z",
+      "settledAt": "",
+      "requestId": "r_8f3ka2...",
+      "caller": "cron",
+      "channel": "ntfy",
+      "title": "Backup failed",
+      "priority": "high",
+      "outcome": "ok"
+    },
+    {
+      "ts": "2026-08-08T09:31:02.418Z",
+      "settledAt": "2026-08-08T09:33:44.902Z",
+      "requestId": "r_8f3ka2...",
+      "caller": "cron",
+      "channel": "email",
+      "title": "Backup failed",
+      "priority": "high",
+      "outcome": "failed: smtp: 550 mailbox unavailable"
+    }
+  ],
+  "count": 2,
+  "truncated": false
+}
+```
+
+One item per notification **per channel** — a fan-out to two channels is two
+items sharing a `requestId`. Outcomes use the same vocabulary as the send
+response, and are as settled as the log knows them: a notification that answered
+`202 queued` shows up here with whatever its delivery eventually was, and
+`settledAt` says when that was decided (empty when the outcome was already final
+at accept time). `ts` is when it was accepted, not when a retry finally landed,
+so a message stays where it belongs in the timeline. Every field is always
+present; a `title` is empty only when the accept line has already scrolled out of
+the read window and just its settled outcome remains.
+
+| Parameter | Default | Notes |
+|---|---|---|
+| `limit` | `50` | 1–500. Outside that is a `400`, not a clamp — an answer silently cut to the maximum is indistinguishable from the log holding only that many |
+| `since` | *(none)* | RFC3339. Keeps what has *changed* since then — accepted after it, or settled after it |
+| `channel` | *(none)* | One channel id. Not checked against the current config, since a channel deleted this morning still has history |
+
+**To poll**, pass `since` set to the newest `ts` you hold and check `truncated`.
+Timestamps are published at millisecond precision and compared at that same
+precision, so the row you name is excluded rather than handed back on every poll
+for ever. `truncated: true` means the limit cut *older* matching rows off the
+answer — raise `limit` and ask again before advancing your cursor, or those rows
+are gone for good. An item you have already seen reappears if its outcome
+settled since: it keeps its original `ts` and gains a `settledAt`, which is the
+only way a `failed` that arrived two hours late ever reaches a cursor that has
+long passed the accept time.
+
+Unknown query parameters are rejected with `400`, for the same reason unknown
+body fields are: a misspelled `chanel=` that quietly returns everything is a
+filter the caller believes is applied.
+
+**This is admin-scoped, and a valid key is not enough.** Reading takes a key
+granted `recent = true` in [`keys.toml`](#keystoml--callers-and-permissions), or
+an operator identity on the dashboard's allowlist — so the log is also readable
+from the browser already trusted with channel credentials. A key that can only
+send gets a `403`. Every read is written to the delivery log — refusals with the
+caller id that was turned away, successful reads with the credential that was
+used and the query it ran. The response is `Cache-Control: no-store, private`,
+like the dashboard, because it is the same content in JSON.
+
+The read covers the tail of the log rather than all of it, so it stays bounded
+however large the file grows; older history is still there for `grep`. The
+window grows when it has to: most of the file may be refusals or admin lines
+rather than deliveries, and a fixed window would let a scanner push every real
+delivery out of view and answer a legitimate poll with silence. It is
+deliberately outside the global rate cap, which exists to bound deliveries — a
+poll spends no upstream quota and wakes nobody's phone, and a dashboard tab
+should not be able to rate-cap the alerts it exists to display. Reads take the
+log's lock only long enough to measure the file, never for the copy, so a poll
+cannot hold up the notification the hub is trying to record.
+
 ### `GET /openapi.json`
 
 The served OpenAPI 3.1 spec, on the public port and deliberately **unauthenticated**:
@@ -657,22 +760,32 @@ own windows:
 notify_requests_total{outcome="delivered"}
 notify_deliveries_total{channel="ntfy",outcome="ok"}
 notify_auth_failures_total
+notify_recent_reads_total{outcome="ok"}
 process_start_time_seconds
 ```
+
+Delivery-log reads are counted apart from sends, and a key refused for lacking
+the `recent` grant counts as `notify_recent_reads_total{outcome="forbidden"}`
+rather than an auth failure — that counter is for spotting someone guessing
+credentials, and a dashboard configured with a send-only key is not that.
 
 Label values are channel ids and outcomes only — never caller ids or payload
 content.
 
 **The delivery log** is JSONL, one line per notification at accept time plus a
 terminal line for anything that settles later, and separate lines for auth
-failures and rate caps. It is append-only and greppable; give it a `logrotate`
+failures, rate caps, dashboard changes and delivery-log reads (`kind: "read"`,
+carrying the caller or operator that read it and the query they ran — reading
+everyone's notifications is worth attributing, the same as changing a grant). It is append-only and greppable; give it a `logrotate`
 unit, since an unbounded log filling a small disk is itself a silent failure.
 
 Rotate it with **`copytruncate`**. hubbub opens the log once at startup and holds
 that descriptor, so the default rename-and-create rotation leaves it writing into
 the rotated-away file: the new `delivery.log` stays empty while terminal
 outcomes disappear into a file that the next rotation compresses or deletes.
-`copytruncate` keeps the descriptor valid.
+`copytruncate` keeps the descriptor valid. [`GET /v1/recent`](#get-v1recent)
+reads back through that same descriptor rather than re-opening the path, so it
+shows what the hub is actually writing either way.
 
 ```
 /var/lib/hubbub/delivery.log {
@@ -764,7 +877,7 @@ Two rules the codebase holds to:
 - [ ] Bare-URL webhooks (`POST /hook/<token>`) for senders that can't set headers
 - [x] `/admin` dashboard — keys, grants and channel settings in a browser,
       behind a pluggable identity provider (`exe-dev` first)
-- [ ] `GET /v1/recent` — a delivery-log view
+- [x] `GET /v1/recent` — a delivery-log view, on its own read grant
 
 ## Prior art
 

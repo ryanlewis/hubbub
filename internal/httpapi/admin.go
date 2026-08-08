@@ -138,6 +138,10 @@ type adminCaller struct {
 	Keys     []adminKey
 	Channels []string
 	Grants   []adminGrant
+	// Recent is the delivery-log read grant. Not editable here — it is a
+	// hand-edit in keys.toml — but shown, because a permission the dashboard
+	// omits is one that gets granted once and forgotten.
+	Recent bool
 }
 
 type adminKey struct {
@@ -251,7 +255,7 @@ func (s *Server) fillAdminState(v *adminView) error {
 		return fmt.Errorf("reading keys: %w", err)
 	}
 	for _, c := range ring.Callers() {
-		ac := adminCaller{ID: c.ID, Channels: c.Channels}
+		ac := adminCaller{ID: c.ID, Channels: c.Channels, Recent: c.Recent}
 		for _, k := range c.Keys {
 			ac.Keys = append(ac.Keys, adminKey{Prefix: prefixOf(k)})
 		}

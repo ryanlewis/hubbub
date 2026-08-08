@@ -16,6 +16,13 @@ type Caller struct {
 	ID       string
 	Keys     []string
 	Channels []string
+	// Recent grants read access to the delivery log via GET /v1/recent. It is
+	// deliberately a separate grant from the channels list rather than implied
+	// by holding any valid key: the log carries every caller's notification
+	// content, so a send key leaking must not also mean a reader of everyone
+	// else's titles. Off by default, and orthogonal to sending — a dashboard
+	// key is normally `channels = []` plus this.
+	Recent bool
 	// Parsed-but-inert until their features land (per-key caps, hooks).
 	MaxPerHour int
 	URLTokens  []string
@@ -26,6 +33,7 @@ type callerTOML struct {
 	Key        flexStrings       `toml:"key"`
 	URLToken   flexStrings       `toml:"url_token"`
 	Channels   []string          `toml:"channels"`
+	Recent     bool              `toml:"recent"`
 	MaxPerHour int               `toml:"max_per_hour"`
 	Defaults   map[string]string `toml:"defaults"`
 }
@@ -142,6 +150,7 @@ func ParseKeys(src []byte, name string) (*Keyring, error) {
 			ID:         id,
 			Keys:       e.Key,
 			Channels:   e.Channels,
+			Recent:     e.Recent,
 			MaxPerHour: e.MaxPerHour,
 			URLTokens:  e.URLToken,
 			Defaults:   e.Defaults,

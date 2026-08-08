@@ -180,6 +180,121 @@
         }
       }
     },
+    "/v1/recent": {
+      "get": {
+        "operationId": "recent",
+        "summary": "Recent deliveries, newest first.",
+        "description": "A read of the hub's delivery log: what came in, which channel it went to and how it ended up. One item per notification *per channel* — a fan-out to two channels is two items sharing a `requestId`.\n\nOutcomes are reported as settled as the log knows them, so a notification that answered `202 queued` appears here with whatever its delivery eventually was.\n\n**Admin-scoped, and holding a valid key is not enough.** The log carries every caller's titles and caller ids, so reading it takes a key granted `recent = true` in `keys.toml` — or, from a browser, an operator identity this hub's admin allowlist permits. A key that can only send gets a `403`. Every read, refused or served, is recorded in the log it reads.\n\n**To poll:** send `since` set to the newest `ts` you already hold, and check `truncated` — when it is true the answer was cut to `limit` and the *oldest* matching rows were dropped, so raise `limit` and ask again before advancing your cursor. An item resurfaces if its outcome settles after you last saw it, keeping its original `ts` and gaining a `settledAt`.\n\nThe read covers the tail of the log, not its whole history; older entries stay in the file for `grep`. Unknown query parameters are rejected rather than ignored, so a misspelled filter cannot silently return everything.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "How many items to return, newest first. Out-of-range values are a 400 rather than clamped: an answer silently cut to the maximum is indistinguishable from the log holding only that many.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 50
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "description": "RFC3339 timestamp. Keeps only items that have *changed* since this instant — accepted after it, or settled after it. Pass the `ts` of the newest item you already hold: timestamps are published at millisecond precision and compared at the same precision, so the row you name is excluded rather than returned again on every poll.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "channel",
+            "in": "query",
+            "description": "Keep only this channel's deliveries. Not checked against the configured channels: a channel deleted this morning still has history worth reading.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The matching deliveries. An empty log is a 200 with `items: []`, never a 404.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecentResponse"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "ts": "2026-08-08T09:31:02.418Z",
+                      "settledAt": "",
+                      "requestId": "r_cc519c9a3ee79f270c4e9823cd56f2f3",
+                      "caller": "cron",
+                      "channel": "ntfy",
+                      "title": "Backup failed",
+                      "priority": "high",
+                      "outcome": "ok"
+                    },
+                    {
+                      "ts": "2026-08-08T09:31:02.418Z",
+                      "settledAt": "2026-08-08T09:33:44.902Z",
+                      "requestId": "r_cc519c9a3ee79f270c4e9823cd56f2f3",
+                      "caller": "cron",
+                      "channel": "email",
+                      "title": "Backup failed",
+                      "priority": "high",
+                      "outcome": "failed: smtp: 550 mailbox unavailable"
+                    }
+                  ],
+                  "count": 2,
+                  "truncated": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An unknown query parameter, an unparseable `since`, or a `limit` outside 1–500.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or unknown bearer key, and no permitted admin identity on the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key is valid but not granted delivery-log access. Sending and reading are separate permissions on purpose: a send key that leaks must not also expose every other caller's notifications.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The delivery log could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "operationId": "health",
@@ -362,6 +477,67 @@
               "type": "string",
               "description": "`ok`, `queued`, `disabled`, or a `failed: …` / `dropped: …` reason."
             }
+          }
+        }
+      },
+      "RecentResponse": {
+        "type": "object",
+        "required": ["items", "count", "truncated"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "Deliveries, newest first. Always present, `[]` when nothing matched.",
+            "items": {
+              "$ref": "#/components/schemas/RecentItem"
+            }
+          },
+          "count": {
+            "type": "integer",
+            "description": "How many items this response carries — the length of `items`, not the size of the log."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True when more rows matched than `limit` allowed. The rows dropped are the *oldest* of the match, so a caller advancing a `since` cursor past this answer would skip them for good: raise `limit` and repeat the request first."
+          }
+        }
+      },
+      "RecentItem": {
+        "type": "object",
+        "required": ["ts", "settledAt", "requestId", "caller", "channel", "title", "priority", "outcome"],
+        "properties": {
+          "ts": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the notification was accepted, RFC3339 in UTC at millisecond precision — not when a retry finally settled it. A message that queued at 09:00 and delivered at 11:00 still sorts under 09:00, because that is when it was news. This is the value to pass back as `since`."
+          },
+          "settledAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When a later delivery attempt fixed this outcome, or `\"\"` if the outcome was already final when the notification was accepted. `since` filters on this where it is set, so an outcome settled hours after the fact still reaches a caller whose cursor has moved past `ts`."
+          },
+          "requestId": {
+            "type": "string",
+            "description": "The id the sending call returned. Shared by every channel of one fan-out, so it groups the items belonging to a single notification."
+          },
+          "caller": {
+            "type": "string",
+            "description": "The caller id from `keys.toml` that sent it — the caller, never the key."
+          },
+          "channel": {
+            "type": "string",
+            "description": "The channel id this item is the outcome for."
+          },
+          "title": {
+            "type": "string",
+            "description": "The sanitised title as delivered. Empty when the notification's accept line has already scrolled out of the read window and only its settled outcome remains."
+          },
+          "priority": {
+            "type": "string",
+            "description": "The priority it was sent with, or empty where the accept line is no longer in the window. Display only, exactly as on the way in."
+          },
+          "outcome": {
+            "type": "string",
+            "description": "`ok`, `queued`, `disabled`, or a `failed: …` / `dropped: …` reason — the same vocabulary the send response uses per channel. `queued` here means still in flight at read time, not a promise about the past."
           }
         }
       },

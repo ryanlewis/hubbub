@@ -41,7 +41,10 @@ type oaOperation struct {
 	// A pointer so "absent" and "present but empty" stay distinguishable:
 	// absent inherits the document's security requirement, `[]` opts out of it.
 	// Collapsing the two would put a "bearer key required" badge on /health.
-	Security    *[]json.RawMessage `json:"security"`
+	Security *[]json.RawMessage `json:"security"`
+	// Parameters is query-string only in this document; a path parameter would
+	// want rendering next to the path itself rather than in this table.
+	Parameters  []oaParameter `json:"parameters"`
 	RequestBody *struct {
 		Required bool               `json:"required"`
 		Content  map[string]oaMedia `json:"content"`
@@ -50,6 +53,14 @@ type oaOperation struct {
 		Description string             `json:"description"`
 		Content     map[string]oaMedia `json:"content"`
 	} `json:"responses"`
+}
+
+type oaParameter struct {
+	Name        string    `json:"name"`
+	In          string    `json:"in"`
+	Required    bool      `json:"required"`
+	Description string    `json:"description"`
+	Schema      *oaSchema `json:"schema"`
 }
 
 type oaMedia struct {
@@ -73,9 +84,11 @@ type oaSchema struct {
 	Required    []string             `json:"required"`
 	// Pointers so a zero-valued limit is distinguishable from an absent one —
 	// "≤ 0 bytes" on every unconstrained field would be worse than no column.
-	MinLength *int `json:"minLength"`
-	MinItems  *int `json:"minItems"`
-	MaxItems  *int `json:"maxItems"`
+	MinLength *int     `json:"minLength"`
+	MinItems  *int     `json:"minItems"`
+	MaxItems  *int     `json:"maxItems"`
+	Minimum   *float64 `json:"minimum"`
+	Maximum   *float64 `json:"maximum"`
 	// MaxBytes is an extension, not JSON Schema's maxLength, because every cap
 	// this server enforces is a *byte* cap (len on the Go string) and maxLength
 	// counts characters. Published as maxLength, a 256-emoji title validated

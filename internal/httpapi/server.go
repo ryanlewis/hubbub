@@ -53,6 +53,10 @@ type Server struct {
 func (s *Server) PublicMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/notify", s.handleNotify)
+	// Reading the log is admin-scoped, not "any valid key" — the gate is in the
+	// handler rather than in a wrapper here, because two different credentials
+	// open it and only one of them is a bearer key.
+	mux.HandleFunc("GET /v1/recent", s.handleRecent)
 	mux.HandleFunc("GET /health", s.handleHealth)
 	// Unauthenticated on purpose: the spec exposes shape, not secrets, so an
 	// agent can be pointed at the base URL and discover the contract before it

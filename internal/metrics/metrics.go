@@ -21,6 +21,11 @@ type Metrics struct {
 	// adminChanges is by action; nil until the dashboard is used, so a hub
 	// without one exposes no admin series at all.
 	adminChanges map[string]uint64
+	// recentReads is by outcome; nil until the delivery-log endpoint is used.
+	// Reads get their own series rather than sharing the request counter: a
+	// poll is not a notification, and counting one as the other would put a
+	// dashboard's traffic into the numbers an operator sizes the rate cap from.
+	recentReads map[string]uint64
 }
 
 func New() *Metrics {
@@ -61,6 +66,18 @@ func (m *Metrics) AdminChange(action string) {
 	m.adminChanges[action]++
 }
 
+// RecentRead counts a delivery-log read by outcome — a fixed, code-defined set
+// (`ok`, `unauthorized`, `forbidden`, `rejected`, `error`), so this stays free
+// of caller ids like every other label here.
+func (m *Metrics) RecentRead(outcome string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.recentReads == nil {
+		m.recentReads = make(map[string]uint64)
+	}
+	m.recentReads[outcome]++
+}
+
 func (m *Metrics) Render() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -86,6 +103,12 @@ func (m *Metrics) Render() string {
 	}
 	b.WriteString("# TYPE notify_auth_failures_total counter\n")
 	fmt.Fprintf(&b, "notify_auth_failures_total %d\n", m.authFails)
+	if len(m.recentReads) > 0 {
+		b.WriteString("# TYPE notify_recent_reads_total counter\n")
+		for _, k := range sortedKeys(m.recentReads) {
+			fmt.Fprintf(&b, "notify_recent_reads_total{outcome=%q} %d\n", k, m.recentReads[k])
+		}
+	}
 	if len(m.adminChanges) > 0 {
 		b.WriteString("# TYPE notify_admin_changes_total counter\n")
 		for _, k := range sortedKeys(m.adminChanges) {
