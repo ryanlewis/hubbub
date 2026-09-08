@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  schedule:
+    # Weekly, so a new stdlib advisory surfaces on its own rather than waiting
+    # for someone to push. A quiet repo is exactly where a toolchain floor rots.
+    - cron: "43 6 * * 1"
 
 permissions:
   contents: read
@@ -16,6 +20,11 @@ jobs:
   commits:
     name: Commit messages
     runs-on: ubuntu-latest
+    # A scheduled run has no push range, so the check would fall through to the
+    # whole history and re-judge every commit already merged. The weekly run is
+    # here for govulncheck; keeping it single-purpose means a red cron means an
+    # advisory, not a subject line someone wrote a year ago.
+    if: github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -121,3 +130,25 @@ jobs:
           GOARCH: amd64
           CGO_ENABLED: 0
         run: go build -o /dev/null .
+
+      # go.mod names the toolchain the deploy binary is built with, so a stale
+      # go.sum or an untidy require block is a difference between what CI proves
+      # and what ships. Cheap to assert, and it fails loudly rather than drifting.
+      - name: Verify modules
+        run: |
+          go mod tidy
+          go mod verify
+          git diff --exit-code go.mod go.sum
+
+      # Exit-code gate: a reachable vulnerability fails the job. Renovate only
+      # bumps modules and never touches the go directive, so nothing else in the
+      # repo would notice the standard library going stale underneath it — which
+      # is how the floor sat on 1.26.1 with twenty reachable advisories.
+      #
+      # Pinned like every other dependency: `@latest` would fetch and execute a
+      # release nobody in this repo has seen, and buys nothing, since the
+      # advisories are queried from vuln.go.dev at run time rather than baked
+      # into the binary. A custom manager in renovate.json5 bumps the version
+      # below, since nothing else in the repo would.
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...

@@ -71,6 +71,24 @@
     addLabels: ['security'],
   },
 
+  // govulncheck is pinned inline in the workflow rather than required by
+  // go.mod — it is a CI tool, not something the binary links — so no manager
+  // sees it by default. Without this it would be the one dependency in the
+  // repo that silently rots, or the one that runs whatever `@latest` happens
+  // to be on the morning of a compromised release.
+  customManagers: [
+    {
+      customType: 'regex',
+      managerFilePatterns: ['/^\\.github/workflows/.+\\.ya?ml$/'],
+      // depName is the module, not the command path the workflow names: the
+      // `go` datasource resolves modules, and golang.org/x/vuln/cmd/govulncheck
+      // is a package inside golang.org/x/vuln.
+      matchStrings: ['go run golang\\.org/x/vuln/cmd/govulncheck@(?<currentValue>v[\\d.]+)'],
+      depNameTemplate: 'golang.org/x/vuln',
+      datasourceTemplate: 'go',
+    },
+  ],
+
   packageRules: [
     {
       description: 'One PR a week for everything that is not a major bump. \
