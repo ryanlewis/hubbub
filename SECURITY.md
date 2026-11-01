@@ -38,7 +38,9 @@ code — which does not make it any less your incident.
 2. **The ops port is unreachable from the internet.** It carries no
    authentication of any kind, and `POST /test/{channel}` on it sends a real
    notification. Where you bind it *is* the access control, which is why the
-   `[ops]` table is presence-enabled: delete it and no ops listener exists.
+   `[ops]` table is presence-enabled: delete it and no ops listener exists,
+   and why `ops.bind` exists: on a host whose other interfaces face a
+   forwarding proxy, bind it to an address only you can reach.
 
 3. **Admin identity comes from a proxy that strips client-supplied copies of
    its own headers.** With `auth = "exe-dev"`, `/admin` trusts
@@ -46,6 +48,9 @@ code — which does not make it any less your incident.
    copy a client sends, and worthless anywhere else — reached directly, the
    header is whatever the caller typed, and so is the identity. hubbub warns
    about this on every start rather than letting it be discovered later.
+   With `auth = "tailscale"` the assumption is different: that the local
+   `tailscaled` is honest about who owns a peer address. Header forgery doesn't
+   apply, and a request that isn't from a tailnet person has no identity.
 
 4. **The config files are readable only by the service user.** `channels.toml`
    holds SMTP passwords and ntfy tokens; `keys.toml` is nothing but

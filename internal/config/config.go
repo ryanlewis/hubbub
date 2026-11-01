@@ -9,6 +9,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -36,6 +37,12 @@ func (d Duration) MarshalText() ([]byte, error) {
 
 type OpsConfig struct {
 	Port int `toml:"port"`
+	// Bind is the IP address the ops listener accepts on; empty is every
+	// interface. The ops routes carry no auth, so where they listen is their
+	// only access control, and on a host whose other interfaces face a
+	// forwarding proxy "every interface" puts /metrics and the test CTA one
+	// port-forward away from the internet.
+	Bind string `toml:"bind"`
 }
 
 type HeartbeatConfig struct {
@@ -102,6 +109,12 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if cfg.Ops != nil && (cfg.Ops.Port <= 0 || cfg.Ops.Port > 65535) {
 		return nil, fmt.Errorf("%s: ops.port out of range", path)
+	}
+	// An address, not a hostname: a name would be resolved once at startup to
+	// whatever DNS said then, and a bind that silently follows DNS is a bind
+	// nobody chose.
+	if cfg.Ops != nil && cfg.Ops.Bind != "" && net.ParseIP(cfg.Ops.Bind) == nil {
+		return nil, fmt.Errorf("%s: ops.bind must be an IP address, got %q", path, cfg.Ops.Bind)
 	}
 	// Every remaining knob is a positive quantity. The defaults above only
 	// apply to *absent* fields, so an explicit 0 reaches the runtime as-is —

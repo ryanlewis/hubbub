@@ -1,0 +1,44 @@
+# systemd unit for hubbub on a plain Linux host. install.sh puts it at
+# /etc/systemd/system/hubbub.service; nothing in it names a particular host.
+[Unit]
+Description=hubbub notification fan-out hub
+Documentation=https://github.com/ryanlewis/hubbub
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hubbub
+Group=hubbub
+ExecStart=/opt/hubbub/bin/hubbub -config /etc/hubbub/hubbub.toml
+Restart=always
+RestartSec=2s
+
+# The spool and delivery log live here; 0700 because the log holds every
+# caller's notification content.
+StateDirectory=hubbub
+StateDirectoryMode=0700
+
+# This process holds every caller's key and each channel's credentials, so
+# give it the smallest filesystem and syscall surface that still works.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+# /admin edits keys.toml and channels.toml by writing a temp file and renaming
+# it, so the config *directory* must be writable despite ProtectSystem=strict.
+ReadWritePaths=/var/lib/hubbub /etc/hubbub
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+# AF_UNIX is load-bearing with auth = "tailscale": the whois lookup is a
+# connection to tailscaled's socket.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

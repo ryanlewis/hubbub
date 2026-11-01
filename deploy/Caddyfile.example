@@ -1,0 +1,12 @@
+# A public route to hubbub through a TLS-terminating proxy that forwards plain
+# HTTP to Caddy (a NAT host's provider proxy, say). Replace the hostname and
+# the bind address with your own.
+http://notify.example.com {
+	bind 10.0.0.2
+	log
+	# /admin is for the tailnet, never the public route. With
+	# auth = "tailscale" a proxied request has no identity anyway (it arrives
+	# from loopback); this keeps the page from being offered at all.
+	respond /admin* 404
+	reverse_proxy 127.0.0.1:8000
+}

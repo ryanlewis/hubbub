@@ -31,7 +31,8 @@ type Provider interface {
 	// none. It must never fabricate one.
 	Identify(r *http.Request) (Identity, bool)
 	// LoginURL is where an anonymous browser is sent to acquire an identity.
-	// returnPath is where it should land afterwards.
+	// returnPath is where it should land afterwards. "" means the provider has
+	// no login flow to send anyone to, and the request is refused instead.
 	LoginURL(returnPath string) string
 	// Warning is a startup line describing what the provider assumes about its
 	// deployment, or "" if it assumes nothing. Trust in a header is only ever
@@ -126,6 +127,10 @@ func (g *Guard) Protect(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id, authenticated, permitted := g.Identity(r)
 		switch {
+		case !authenticated && g.Provider.LoginURL(r.URL.EscapedPath()) == "":
+			// Nowhere to send them. Redirecting to the page itself would loop,
+			// and the way in (joining a network, say) is outside this hub.
+			http.Error(w, "no identity on this request; this dashboard has no login page to send you to", http.StatusForbidden)
 		case !authenticated:
 			// A redirect, not a 401: the visitor is a browser that can go and
 			// get an identity. Only the path is echoed back into the login
