@@ -5,6 +5,11 @@ Description=hubbub notification fan-out hub
 Documentation=https://github.com/ryanlewis/hubbub
 After=network-online.target tailscaled.service
 Wants=network-online.target
+# Never give up restarting. With ops.bind on a tailnet address, hubbub exits
+# until tailscaled has assigned it (a slow boot, an expired node key), and
+# systemd's default start limit would otherwise leave the whole hub down for
+# good after five quick failures, public API included.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple

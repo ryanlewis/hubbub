@@ -272,7 +272,7 @@ func TestOpsBind(t *testing.T) {
 		}
 	})
 
-	for _, ip := range []string{"100.90.24.118", "127.0.0.1", "fd7a:115c:a1e0::1"} {
+	for _, ip := range []string{"100.64.0.1", "127.0.0.1", "fd7a:115c:a1e0::1"} {
 		t.Run("accepts "+ip, func(t *testing.T) {
 			cfg, err := load(t, "bind = \""+ip+"\"\n")
 			if err != nil || cfg.Ops.Bind != ip {
@@ -283,7 +283,7 @@ func TestOpsBind(t *testing.T) {
 
 	// A hostname, or an address with the port glued on, is the likeliest
 	// mistake; either would otherwise surface as a listen error at boot.
-	for _, bad := range []string{"ernie", "100.90.24.118:2112", "[::1]"} {
+	for _, bad := range []string{"tailnet-host", "100.64.0.1:2112", "[::1]"} {
 		t.Run("rejects "+bad, func(t *testing.T) {
 			_, err := load(t, "bind = \""+bad+"\"\n")
 			if err == nil || !strings.Contains(err.Error(), "ops.bind") {

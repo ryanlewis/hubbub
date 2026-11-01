@@ -20,7 +20,10 @@ install -d -m 0755 -o root -g root "$bin"
 install -d -m 0700 -o hubbub -g hubbub /etc/hubbub
 
 # Rename, not copy, onto the live path: Linux refuses to write over a running
-# executable (ETXTBSY).
+# executable (ETXTBSY). swapped records whether this run replaced the binary:
+# only then is hubbub.prev the thing to roll back to. A re-run after a config
+# mistake must not resurrect whatever binary an older upgrade left behind.
+swapped=no
 if [ -e "$bin/hubbub" ]; then
 	if cmp -s "$here/hubbub" "$bin/hubbub"; then
 		echo "binary unchanged"
@@ -28,6 +31,7 @@ if [ -e "$bin/hubbub" ]; then
 		cp -p "$bin/hubbub" "$bin/hubbub.prev"
 		install -m 0755 "$here/hubbub" "$bin/hubbub.new"
 		mv "$bin/hubbub.new" "$bin/hubbub"
+		swapped=yes
 	fi
 else
 	install -m 0755 "$here/hubbub" "$bin/hubbub"
@@ -47,11 +51,13 @@ systemctl restart hubbub
 port=$(sed -n 's/^public_port *= *\([0-9]*\).*/\1/p' /etc/hubbub/hubbub.toml)
 port=${port:-8080}
 i=0
-until curl -fsS -o /dev/null "http://127.0.0.1:$port/health"; do
+# --max-time: a binary that accepts and never answers would otherwise hang
+# here forever, and the rollback below would never run.
+until curl -fsS -o /dev/null --max-time 2 "http://127.0.0.1:$port/health"; do
 	i=$((i + 1))
 	if [ "$i" -ge 10 ]; then
 		echo "hubbub did not answer /health on :$port" >&2
-		if [ -e "$bin/hubbub.prev" ]; then
+		if [ "$swapped" = yes ]; then
 			mv "$bin/hubbub.prev" "$bin/hubbub"
 			systemctl restart hubbub
 			echo "rolled back to the previous binary" >&2
@@ -60,4 +66,4 @@ until curl -fsS -o /dev/null "http://127.0.0.1:$port/health"; do
 	fi
 	sleep 1
 done
-curl -fsS "http://127.0.0.1:$port/health"; echo
+curl -fsS --max-time 2 "http://127.0.0.1:$port/health"; echo
