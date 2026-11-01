@@ -34,6 +34,7 @@ channels_file = "example/channels.toml"
 # control for /metrics and the test CTA, which carry no auth of their own.
 [ops]
 port = 2112
+# bind = "100.64.0.1"   # one address only, e.g. the tailnet IP; default is all
 
 # The admin dashboard at /admin: edit key permissions and channel settings in a
 # browser instead of over SSH. Presence-enabled — delete this table and the
@@ -44,7 +45,9 @@ port = 2112
 # the X-ExeDev-Email header, which is only safe behind the exe.dev proxy, since
 # the proxy strips any copy a client sends. Reached directly — a local run, a
 # port exposed around the proxy — that header is whatever the caller says it
-# is, and so is the identity.
+# is, and so is the identity. On a tailnet, auth = "tailscale" avoids the
+# header altogether: it asks tailscaled who owns the peer address, and
+# allowed_emails then holds Tailscale login names such as "you@github".
 #
 # allowed_emails has no "allow everyone": an empty list fails the load rather
 # than publishing key management to the internet.

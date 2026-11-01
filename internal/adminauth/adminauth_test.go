@@ -118,8 +118,8 @@ func TestUnknownProviderIsNamedWithTheKnownOnes(t *testing.T) {
 	if !strings.Contains(err.Error(), "exe-dev") {
 		t.Errorf("err = %v, want it to list the known providers", err)
 	}
-	if got := Names(); len(got) != 1 || got[0] != "exe-dev" {
-		t.Errorf("Names() = %v, want [exe-dev]", got)
+	if got := Names(); len(got) != 2 || got[0] != "exe-dev" || got[1] != "tailscale" {
+		t.Errorf("Names() = %v, want [exe-dev tailscale]", got)
 	}
 }
 

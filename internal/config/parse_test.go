@@ -256,3 +256,39 @@ func TestLoadKeysReportsMissingFile(t *testing.T) {
 		t.Errorf("err = %v, want a not-exist error", err)
 	}
 }
+
+func TestOpsBind(t *testing.T) {
+	load := func(t *testing.T, ops string) (*Config, error) {
+		t.Helper()
+		p := filepath.Join(t.TempDir(), "hubbub.toml")
+		write(t, p, "spool_dir = \"s\"\n\n[ops]\nport = 2112\n"+ops)
+		return LoadConfig(p)
+	}
+
+	t.Run("absent means every interface", func(t *testing.T) {
+		cfg, err := load(t, "")
+		if err != nil || cfg.Ops.Bind != "" {
+			t.Fatalf("cfg.Ops = %+v, err = %v", cfg.Ops, err)
+		}
+	})
+
+	for _, ip := range []string{"100.64.0.1", "127.0.0.1", "fd7a:115c:a1e0::1"} {
+		t.Run("accepts "+ip, func(t *testing.T) {
+			cfg, err := load(t, "bind = \""+ip+"\"\n")
+			if err != nil || cfg.Ops.Bind != ip {
+				t.Fatalf("cfg.Ops = %+v, err = %v", cfg.Ops, err)
+			}
+		})
+	}
+
+	// A hostname, or an address with the port glued on, is the likeliest
+	// mistake; either would otherwise surface as a listen error at boot.
+	for _, bad := range []string{"tailnet-host", "100.64.0.1:2112", "[::1]"} {
+		t.Run("rejects "+bad, func(t *testing.T) {
+			_, err := load(t, "bind = \""+bad+"\"\n")
+			if err == nil || !strings.Contains(err.Error(), "ops.bind") {
+				t.Errorf("err = %v, want an ops.bind complaint", err)
+			}
+		})
+	}
+}

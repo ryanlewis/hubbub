@@ -7,9 +7,11 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -152,9 +154,9 @@ func run(configPath string) error {
 	// Explicit timeouts on both listeners: Go's zero-values are unlimited,
 	// and slow-connection fd exhaustion is exactly the alive-but-not-serving
 	// state the heartbeat self-probe watches for.
-	newServer := func(port int, h http.Handler) *http.Server {
+	newServer := func(host string, port int, h http.Handler) *http.Server {
 		return &http.Server{
-			Addr:              fmt.Sprintf(":%d", port),
+			Addr:              net.JoinHostPort(host, strconv.Itoa(port)),
 			Handler:           h,
 			ReadHeaderTimeout: 5 * time.Second,
 			ReadTimeout:       30 * time.Second,
@@ -163,7 +165,7 @@ func run(configPath string) error {
 		}
 	}
 
-	public := newServer(cfg.PublicPort, srv.PublicMux())
+	public := newServer("", cfg.PublicPort, srv.PublicMux())
 	errCh := make(chan error, 2)
 	go func() {
 		slog.Info("public listener up", "addr", public.Addr, "version", httpapi.Version)
@@ -174,7 +176,7 @@ func run(configPath string) error {
 
 	var ops *http.Server
 	if cfg.Ops != nil {
-		ops = newServer(cfg.Ops.Port, srv.OpsMux())
+		ops = newServer(cfg.Ops.Bind, cfg.Ops.Port, srv.OpsMux())
 		go func() {
 			slog.Info("ops listener up", "addr", ops.Addr)
 			if err := ops.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {

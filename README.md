@@ -161,6 +161,7 @@ channels_file = "channels.toml"
 # Presence-enabled: delete the table and no ops listener comes up.
 [ops]
 port = 2112
+bind = "100.64.0.1"         # optional; default is every interface
 
 [heartbeat]
 url = "https://hc-ping.com/..."
@@ -176,6 +177,7 @@ allowed_emails = ["you@example.com"]
 |---|---|---|
 | `public_port` | `8080` | Caller-facing API |
 | `[ops]` | *(absent)* | Presence-enabled. Brings up a second listener for `/metrics`, `/health` and the test CTA |
+| `ops.bind` | *(every interface)* | IP address the ops listener accepts on, such as the host's tailnet address. An address, not a hostname |
 | `[admin]` | *(absent)* | Presence-enabled. Serves the [dashboard](#the-dashboard) on the public listener. `allowed_emails` must name at least one address — there is no "allow everyone" |
 | `admin.allow_exec_channels` | `false` | Lets the dashboard write channels that name a command to run ([`exec`](#exec--a-channel-that-is-just-your-script)). Off, those are configured over SSH |
 | `rate_cap_per_hour` | `60` | Global cap across all keys. Must be ≥ 1 — there is no "unlimited" |
@@ -701,6 +703,24 @@ accounts is the usual cause.
 > dashboard is whatever the caller says it is too. hubbub logs this warning at
 > every start rather than leaving it to be remembered.
 
+`auth = "tailscale"` trusts no header. For each request it asks the local
+`tailscaled` (over its LocalAPI socket, `/var/run/tailscale/tailscaled.sock`)
+who owns the peer address, so the identity comes from the WireGuard key that
+carried the packet. Tagged nodes are refused, since they are machines rather
+than people, and so is anything that isn't a tailnet peer, including a local
+reverse proxy relaying a public request. That makes `/admin` tailnet-only by
+construction, even if the proxy in front forgets to block it. There is no login
+page to bounce to, so an anonymous request gets a `403`. `allowed_emails` holds
+Tailscale login names, which are not always email addresses: a GitHub-backed
+tailnet's look like `you@github`. The service user needs to reach the socket,
+which `tailscaled` creates world-writable on Linux.
+
+```toml
+[admin]
+auth = "tailscale"
+allowed_emails = ["you@github"]
+```
+
 `/`, `/docs` and `/admin` share a navigation bar, and the dashboard link on it
 is decided per visitor: it appears for an address on `allowed_emails` and for
 nobody else. The first two pages are readable by anyone who can reach the hub,
@@ -823,6 +843,11 @@ pure stdlib means no CGO:
 GOOS=linux GOARCH=amd64 go build -o hubbub .
 ```
 
+`deploy/` has a systemd unit, an idempotent `install.sh` (system user,
+binary swap with `hubbub.prev`, unit, `/health` check with rollback) and a
+Caddy route for a host behind a TLS-terminating proxy. None of it names a
+host; the config files stay yours to write.
+
 Checklist for a real deployment:
 
 - A supervisor (systemd unit) with restart-on-failure and start-on-boot
@@ -876,7 +901,7 @@ Two rules the codebase holds to:
 - [ ] Per-key rate caps and idempotency keys
 - [ ] Bare-URL webhooks (`POST /hook/<token>`) for senders that can't set headers
 - [x] `/admin` dashboard — keys, grants and channel settings in a browser,
-      behind a pluggable identity provider (`exe-dev` first)
+      behind a pluggable identity provider (`exe-dev`, `tailscale`)
 - [x] `GET /v1/recent` — a delivery-log view, on its own read grant
 
 ## Prior art
