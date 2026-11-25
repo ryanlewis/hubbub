@@ -99,6 +99,15 @@ batch called "non-major" is one that gets skimmed instead of read.',
       groupName: 'all non-major dependencies',
     },
     {
+      description: 'The branch status check has no release timestamp for a \
+digest, so renovate/stability-days sits pending on any PR carrying one \
+(renovatebot/renovate#45236). This lets that check pass, so a green check \
+says nothing about how old a digest is. Versioned updates in the same group \
+still have to clear the three-day wait.',
+      matchUpdateTypes: ['digest', 'pinDigest'],
+      minimumReleaseAgeBehaviour: 'timestamp-optional',
+    },
+    {
       description: 'The go directive is the floor a builder has to meet, not \
 a dependency — raising it is a decision about who can still build this, so it \
 arrives alone and never grouped. Merging it means editing the README, which \
